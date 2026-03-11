@@ -4,6 +4,7 @@ Requirements:
 - VS_Code
 - git
 - WSL Ubuntu
+- python
 
 -----------------------------------------------------------
 Pulse Implementation
@@ -13,7 +14,7 @@ Pulse Implementation
 - Move to the folder you would like to keep Pulse in
 - Open the terminal and clone the repo: git clone https://gitlab.kitware.com/physiology/engine.git
 
-Set up virtual enviornment
+## Set up virtual enviornment
 - Move to the engine folder
 - sudo apt update
 - sudo apt install -y build-essential cmake git python3 python3-venv python3-pip
@@ -22,7 +23,7 @@ Set up virtual enviornment
 - pip install -U pip
 - pip install -r requirements.txt
 
-PulseC++ engine compiled
+## PulseC++ engine compiled
 - Create a new folder for the pulse build
 - Enter it
 - cmake -DCMAKE_BUILD_TYPE=Release ../engine
@@ -32,7 +33,7 @@ PulseC++ engine compiled
   - cd ~/Pulse/builds/release/install/bin
    - ./PulseScenarioDriver VitalsMonitor.json
 
- Enable the python API
+## Enable the python API
 - Look for the python module: cd ~/Pulse/builds/release/install/bin
 ls | grep -i pypulse
 - source ~/Pulse/engine/.venv/bin/activate
