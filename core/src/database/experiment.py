@@ -36,12 +36,15 @@ class Experiment:
         pass
 
     @classmethod
-    def from_json(cls, json_data) -> 'Experiment':
-        """Creates an Experiment instance from JSON data."""
+    def from_json(cls, json_data, patient_list: list[str]) -> 'Experiment':
+        """
+        Creates an Experiment instance from JSON data
+        and a list of patient files described by the JSON request.
+        """
         return cls(
             name = json_data.get("name"),
             #TODO: generate experiment_id. perhaps YYYYMMDD_RUN#?
-            patients = json_data.get("patients", []),
+            patients = patient_list,
             simulation_duration = json_data.get("duration_s", 0),
             events = json_data.get("events", []) 
             #TODO: add metrics, scenarios, controller, vitals
