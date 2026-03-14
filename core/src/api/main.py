@@ -12,8 +12,8 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
 #TODO: change if single patient functions are removed
-from ..main import get_patients, AVAILABLE_VARIABLES, run_job_thread, DATA_REQUEST_FACTORIES, UNIT_MAP
-from ..main import run_batch_thread, set_batch_cancel_flag
+from ..main import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
+from ..controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
 
 # === PATH SETUP ===
 PULSE_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)),"pulse_engine")
@@ -84,132 +84,10 @@ def serve_gui():
     return html
 
 
-@app.route('/api/info')
-def api_info():
-    """Return server info for GUI to configure itself."""
-    patients = get_patients()
-    cpu_count = os.cpu_count() or 4
-    return jsonify({
-        'patients': patients,
-        'cpu_count': cpu_count,
-        'version': '4.0',
-        'pulse_home': PULSE_HOME
-    })
-
-
 @app.route('/api/available_variables')
 def api_available_variables():
     """Return the list of available CSV output variables for the GUI."""
     return jsonify(AVAILABLE_VARIABLES)
-
-
-@app.route('/api/submit_job', methods=['POST'])
-def submit_job():
-    job = request.json
-    job_id = str(uuid.uuid4())[:8]
-
-    patient_type = job.get('patient')
-    
-    # Determine if stabilization is needed
-    # Custom patients (form) always need stabilization
-    # Uploaded JSON might be pre-stabilized state or patient definition
-    needs_stabilization = False
-    if patient_type == '__custom__':
-        needs_stabilization = True
-    elif patient_type == '__upload__':
-        # Check if uploaded JSON is a state file or patient definition
-        patient_json = job.get('patient_json', {})
-        is_state_file = any(key in patient_json for key in ['SimulationTime', 'InitialPatient', 'Compartments', 'CurrentPatient'])
-        needs_stabilization = not is_state_file
-    
-    replicates = job.get('replicates', 1)
-    with job_lock:
-        jobs[job_id] = {
-            'status': 'stabilizing' if needs_stabilization else 'running',
-            'job': job,
-            'sim_time': 0,
-            'duration': job.get('duration_s', 300),
-            'last_event': None,
-            'stabilize_time': 0,
-            'started': datetime.now().isoformat(),
-            'current_replicate': 1,
-            'total_replicates': replicates
-        }
-    
-    thread = threading.Thread(target=run_job_thread, args=(job_id, job), daemon=True)
-    thread.start()
-    
-    return jsonify({'job_id': job_id})
-
-
-@app.route('/api/job_status/<job_id>')
-def job_status(job_id):
-    with job_lock:
-        if job_id not in jobs:
-            return jsonify({'status': 'not_found'}), 404
-        return jsonify(jobs[job_id])
-
-
-@app.route('/api/cancel_job/<job_id>', methods=['POST'])
-def cancel_job(job_id):
-    """Cancel a running job."""
-    with job_lock:
-        if job_id not in jobs:
-            return jsonify({'success': False, 'error': 'Job not found'}), 404
-        
-        status = jobs[job_id].get('status')
-        if status not in ('running', 'stabilizing'):
-            return jsonify({'success': False, 'error': f'Job is {status}, cannot cancel'})
-        
-        cancel_flags[job_id] = True
-        return jsonify({'success': True, 'message': 'Cancellation requested'})
-
-
-@app.route('/api/download/<job_id>')
-def download(job_id):
-    with job_lock:
-        if job_id not in jobs:
-            return "Not found", 404
-        job_info = jobs[job_id].copy()
-
-    # Check for multiple replicates (returns ZIP) or single file (returns CSV)
-    if 'csv_paths' in job_info and len(job_info['csv_paths']) > 1:
-        # Multiple replicates - create a ZIP file
-        job_name = job_info.get('job', {}).get('name', 'results')
-        zip_path = os.path.join(RESULTS_FOLDER, f"{job_name}_replicates.zip")
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for csv_path in job_info['csv_paths']:
-                if os.path.exists(csv_path):
-                    zf.write(csv_path, os.path.basename(csv_path))
-        return send_file(zip_path, as_attachment=True)
-    elif 'csv_path' in job_info:
-        return send_file(job_info['csv_path'], as_attachment=True)
-    else:
-        return "Not ready", 400
-
-
-@app.route('/api/list_results')
-def list_results():
-    results = []
-    
-    with job_lock:
-        for job_id, info in jobs.items():
-            if info.get('status') == 'complete':
-                job = info.get('job', {})
-                results.append({
-                    'job_id': job_id,
-                    'type': 'single',
-                    'name': job.get('name', 'unnamed'),
-                    'patient': job.get('patient', '').replace('@0s.json', ''),
-                    'duration': job.get('duration_s', 0),
-                    'event_count': len(job.get('events', [])),
-                    'date': info.get('started', '')[:19].replace('T', ' ')
-                })
-    
-    # TODO: Add batch and vent mechanics results
-    
-    return jsonify(results)
-
 
 @app.route('/api/test_http_controller', methods=['POST'])
 def test_http_controller():

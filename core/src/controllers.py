@@ -7,7 +7,7 @@ from pulse.cdm.scalars import (
     LengthUnit, MassUnit, PressureTimePerVolumeUnit, VolumePerPressureUnit,
     AmountPerVolumeUnit
 )
-from pulse.cdm.engine import SEDataRequest
+from pulse.cdm.engine import SEDataRequest, IEventHandler, eEvent
 
 # === UNIT MAPPING FOR HTTP CONTROLLERS ===
 UNIT_MAP = {
@@ -646,3 +646,508 @@ class BuiltinFluidController:
         self.settings = new.copy()
         return new
 
+# Local HTTP controller for batch simulation (can't use main class due to multiprocessing)
+class BatchHTTPController:
+    """HTTP-based controller for batch simulation workers."""
+
+    # Unit mapping (must be defined locally for multiprocessing)
+    UNIT_MAP = {
+        "mmHg": PressureUnit.mmHg,
+        "cmH2O": PressureUnit.cmH2O,
+        "Pa": PressureUnit.Pa,
+        "mL": VolumeUnit.mL,
+        "L": VolumeUnit.L,
+        "mL/min": VolumePerTimeUnit.mL_Per_min,
+        "L/min": VolumePerTimeUnit.L_Per_min,
+        "1/min": FrequencyUnit.Per_min,
+        "/min": FrequencyUnit.Per_min,
+        "Per_min": FrequencyUnit.Per_min,
+        "Hz": FrequencyUnit.Hz,
+        "s": TimeUnit.s,
+        "min": TimeUnit.min,
+        "g": MassUnit.g,
+        "mg": MassUnit.mg,
+        "g/L": MassPerVolumeUnit.g_Per_L,
+        "mg/mL": MassPerVolumeUnit.g_Per_L,
+    }
+
+    def __init__(self, base_url, config=None, timeout=10.0, simulation_context=None):
+        import requests
+        self.requests = requests
+        self.base_url = base_url.rstrip('/')
+        self.config = config or {}
+        self.timeout = timeout
+        self.data_requests = []
+        self.next_update_s = 1.0
+        self.initialized = False
+        self.last_error = None
+        # Simulation context for concurrent batch identification
+        self.simulation_context = simulation_context or {}
+        self.simulation_id = self.simulation_context.get('simulation_id', '')
+        self.batch_id = self.simulation_context.get('batch_id', '')
+        self.job_id = self.simulation_context.get('job_id', '')
+
+    def send_init(self, patient, vent_settings):
+        payload = {
+            "patient": patient,
+            "vent_settings": vent_settings,
+            "config": self.config,
+            # Simulation identifiers for concurrent batch support
+            "simulation_id": self.simulation_id,
+            "batch_id": self.batch_id,
+            "job_id": self.job_id
+        }
+
+        try:
+            resp = self.requests.post(
+                f"{self.base_url}/init",
+                json=payload,
+                timeout=self.timeout
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("status") != "ok":
+                raise RuntimeError(f"Controller init failed: {data.get('error', 'unknown error')}")
+
+            self.data_requests = data.get("data_requests", [])
+            pulse_requests = []
+
+            for req in self.data_requests:
+                category = req.get("category")
+                name = req.get("name")
+                unit_str = req.get("unit")
+
+                if category == "Physiology":
+                    factory = SEDataRequest.create_physiology_request
+                elif category == "MechanicalVentilator":
+                    factory = SEDataRequest.create_mechanical_ventilator_request
+                else:
+                    raise ValueError(f"Unknown data request category: '{category}'")
+
+                if unit_str:
+                    if unit_str not in self.UNIT_MAP:
+                        raise ValueError(f"Unknown unit: '{unit_str}' for {category}:{name}")
+                    unit = self.UNIT_MAP[unit_str]
+                    pulse_requests.append(factory(name, unit=unit))
+                else:
+                    pulse_requests.append(factory(name))
+
+            self.next_update_s = data.get("next_update_s", 1.0)
+            self.initialized = True
+            self.last_error = None
+
+            return pulse_requests
+
+        except self.requests.exceptions.RequestException as e:
+            self.last_error = f"HTTP error during init: {e}"
+            raise RuntimeError(self.last_error)
+        except (KeyError, ValueError) as e:
+            self.last_error = f"Invalid controller response: {e}"
+            raise RuntimeError(self.last_error)
+
+    def step(self, data_values, current_settings):
+        if not self.initialized:
+            return None
+
+        sim_time = data_values.pop("sim_time_s", 0.0)
+
+        payload = {
+            "sim_time_s": sim_time,
+            "data": data_values,
+            # Simulation identifiers for concurrent batch support
+            "simulation_id": self.simulation_id,
+            "batch_id": self.batch_id,
+            "job_id": self.job_id
+        }
+
+        try:
+            resp = self.requests.post(
+                f"{self.base_url}/update",
+                json=payload,
+                timeout=self.timeout
+            )
+            resp.raise_for_status()
+            response = resp.json()
+
+            if "next_update_s" in response:
+                self.next_update_s = max(0.02, response["next_update_s"])
+
+            commands = response.get("commands", {})
+            result = current_settings.copy()
+            result.update(commands)
+            result["next_interval_s"] = self.next_update_s
+
+            self.last_error = None
+            return result
+
+        except self.requests.exceptions.Timeout:
+            self.last_error = f"Controller timeout after {self.timeout}s"
+            print(f"[BatchHTTPController] {self.last_error}")
+            return None
+        except self.requests.exceptions.RequestException as e:
+            self.last_error = f"HTTP error: {e}"
+            print(f"[BatchHTTPController] {self.last_error}")
+            return None
+        except Exception as e:
+            self.last_error = f"Error parsing response: {e}"
+            print(f"[BatchHTTPController] {self.last_error}")
+            return None
+
+    def shutdown(self):
+        if not self.initialized:
+            return
+        try:
+            payload = {
+                "simulation_id": self.simulation_id,
+                "batch_id": self.batch_id,
+                "job_id": self.job_id
+            }
+            self.requests.post(f"{self.base_url}/shutdown", json=payload, timeout=2.0)
+        except:
+            pass
+
+# Local built-in controller for batch simulation
+class BatchBuiltinController:
+    """Built-in controller implementations for batch simulation."""
+
+    RANDOM_WALK_BOUNDS = {
+        'fio2': {'min': 0.21, 'max': 1.0, 'step': 0.05, 'default': 0.4},
+        'peep_cmh2o': {'min': 5, 'max': 20, 'step': 2, 'default': 5},
+        'vt_ml': {'min': 300, 'max': 600, 'step': 25, 'default': 420},
+        'rr': {'min': 10, 'max': 30, 'step': 2, 'default': 14},
+        'itime_s': {'min': 0.8, 'max': 1.5, 'step': 0.1, 'default': 1.0},
+        'pinsp_cmh2o': {'min': 10, 'max': 30, 'step': 2, 'default': 15},
+    }
+
+    def __init__(self, controller_type):
+        self.controller_type = controller_type
+        self.initialized = False
+
+    def send_init(self, patient, vent_settings):
+        self.initialized = True
+        return []
+
+    def step(self, vitals, current_settings):
+        import random
+        if self.controller_type == "ARDSNet":
+            return self._ardsnet_step(vitals, current_settings)
+        elif self.controller_type == "Adaptive":
+            return self._adaptive_step(vitals, current_settings)
+        elif self.controller_type == "Random":
+            return self._random_step(vitals, current_settings)
+        return current_settings
+
+    def _ardsnet_step(self, vitals, settings):
+        result = settings.copy()
+        spo2 = vitals.get('spo2_pct', 95)
+        if spo2 < 88:
+            result['fio2'] = min(1.0, settings.get('fio2', 0.4) + 0.1)
+        elif spo2 > 95:
+            result['fio2'] = max(0.21, settings.get('fio2', 0.4) - 0.05)
+        return result
+
+    def _adaptive_step(self, vitals, settings):
+        result = settings.copy()
+        spo2 = vitals.get('spo2_pct', 95)
+        paco2 = vitals.get('paco2_mmhg', 40)
+        if spo2 < 90:
+            result['fio2'] = min(1.0, settings.get('fio2', 0.4) + 0.1)
+            result['peep_cmh2o'] = min(20, settings.get('peep_cmh2o', 5) + 2)
+        elif spo2 > 96:
+            result['fio2'] = max(0.21, settings.get('fio2', 0.4) - 0.05)
+        if paco2 > 50:
+            result['rr'] = min(30, settings.get('rr', 14) + 2)
+        elif paco2 < 35:
+            result['rr'] = max(8, settings.get('rr', 14) - 2)
+        return result
+
+    def _random_step(self, vitals, settings):
+        import random
+        result = settings.copy()
+        param = random.choice(list(self.RANDOM_WALK_BOUNDS.keys()))
+        bounds = self.RANDOM_WALK_BOUNDS[param]
+        current = settings.get(param, bounds['default'])
+        direction = random.choice([-1, 1])
+        new_val = current + direction * bounds['step']
+        new_val = max(bounds['min'], min(bounds['max'], new_val))
+        result[param] = new_val
+        return result
+
+    def shutdown(self):
+        pass
+
+# Local built-in fluid controller for batch simulation
+class BatchBuiltinFluidController:
+    """Built-in fluid resuscitation controller for batch simulation."""
+
+    def __init__(self, name):
+        self.name = name
+        self.settings = {
+            'crystalloid_rate_ml_min': 0,
+            'blood_rate_ml_min': 0,
+            'crystalloid_compound': 'Saline',
+            'blood_compound': 'Blood'
+        }
+        self.state = {
+            'phase': 'monitoring',
+            'last_map': None,
+            'last_hr': None,
+            'trend_improving': False
+        }
+
+    def send_init(self, patient, initial_settings=None):
+        self.state['patient'] = patient
+        if initial_settings:
+            self.settings.update(initial_settings)
+
+    def step(self, vitals, current_fluid_settings, blood_loss_ml=0, blood_infused_ml=0, crystalloid_infused_ml=0):
+        if self.name == 'default_fluid_controller':
+            return self._simple_resuscitation(vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml)
+        elif self.name == 'aggressive_fluid_controller':
+            return self._aggressive_resuscitation(vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml)
+        elif self.name == 'conservative_fluid_controller':
+            return self._conservative_resuscitation(vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml)
+        elif self.name == 'damage_control_fluid_controller':
+            return self._damage_control_resuscitation(vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml)
+        return None
+
+    def _simple_resuscitation(self, vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml):
+        """Simple MAP-based fluid resuscitation (MAP target 65-75)."""
+        new = self.settings.copy()
+        map_mmhg = vitals.get('map_mmhg', 70)
+        hr_bpm = vitals.get('hr_bpm', 80)
+
+        if self.state['last_map'] is not None:
+            self.state['trend_improving'] = map_mmhg > self.state['last_map']
+        self.state['last_map'] = map_mmhg
+        self.state['last_hr'] = hr_bpm
+
+        if map_mmhg < 55:
+            self.state['phase'] = 'resuscitating'
+            new['crystalloid_rate_ml_min'] = 250
+            new['blood_rate_ml_min'] = 150 if blood_loss_ml > 500 else 0
+            new['next_interval_s'] = 10
+        elif map_mmhg < 65:
+            self.state['phase'] = 'resuscitating'
+            current_crystalloid = self.settings.get('crystalloid_rate_ml_min', 0)
+            new['crystalloid_rate_ml_min'] = min(200, current_crystalloid + 50)
+            if blood_loss_ml > 750 and (blood_loss_ml - blood_infused_ml - crystalloid_infused_ml/3) > 500:
+                new['blood_rate_ml_min'] = 100
+            else:
+                new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 25)
+            new['next_interval_s'] = 15
+        elif map_mmhg > 75:
+            self.state['phase'] = 'maintaining'
+            new['crystalloid_rate_ml_min'] = max(0, self.settings.get('crystalloid_rate_ml_min', 0) - 50)
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 50)
+            new['next_interval_s'] = 30
+        else:
+            self.state['phase'] = 'maintaining'
+            new['crystalloid_rate_ml_min'] = max(0, self.settings.get('crystalloid_rate_ml_min', 0) - 25)
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 25)
+            new['next_interval_s'] = 20
+
+        if hr_bpm > 120 and map_mmhg < 70:
+            new['crystalloid_rate_ml_min'] = max(new['crystalloid_rate_ml_min'], 150)
+            new['next_interval_s'] = min(new['next_interval_s'], 15)
+
+        self.settings = new.copy()
+        return new
+
+    def _aggressive_resuscitation(self, vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml):
+        """Aggressive fluid resuscitation - higher rates, earlier blood."""
+        new = self.settings.copy()
+        map_mmhg = vitals.get('map_mmhg', 70)
+
+        if map_mmhg < 60:
+            new['crystalloid_rate_ml_min'] = 300
+            new['blood_rate_ml_min'] = 200 if blood_loss_ml > 300 else 100
+            new['next_interval_s'] = 5
+        elif map_mmhg < 70:
+            new['crystalloid_rate_ml_min'] = 200
+            new['blood_rate_ml_min'] = 100 if blood_loss_ml > 500 else 0
+            new['next_interval_s'] = 10
+        elif map_mmhg > 80:
+            new['crystalloid_rate_ml_min'] = max(0, self.settings.get('crystalloid_rate_ml_min', 0) - 100)
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 100)
+            new['next_interval_s'] = 30
+        else:
+            new['crystalloid_rate_ml_min'] = max(0, self.settings.get('crystalloid_rate_ml_min', 0) - 50)
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 50)
+            new['next_interval_s'] = 20
+
+        self.settings = new.copy()
+        return new
+
+    def _conservative_resuscitation(self, vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml):
+        """Conservative/permissive hypotension - lower MAP targets (50-60)."""
+        new = self.settings.copy()
+        map_mmhg = vitals.get('map_mmhg', 70)
+
+        if map_mmhg < 50:
+            new['crystalloid_rate_ml_min'] = 150
+            new['blood_rate_ml_min'] = 100 if blood_loss_ml > 1000 else 0
+            new['next_interval_s'] = 15
+        elif map_mmhg < 55:
+            new['crystalloid_rate_ml_min'] = 100
+            new['blood_rate_ml_min'] = 50 if blood_loss_ml > 750 else 0
+            new['next_interval_s'] = 20
+        elif map_mmhg > 65:
+            new['crystalloid_rate_ml_min'] = max(0, self.settings.get('crystalloid_rate_ml_min', 0) - 50)
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 50)
+            new['next_interval_s'] = 45
+        else:
+            new['crystalloid_rate_ml_min'] = max(0, self.settings.get('crystalloid_rate_ml_min', 0) - 25)
+            new['blood_rate_ml_min'] = 0
+            new['next_interval_s'] = 30
+
+        self.settings = new.copy()
+        return new
+
+    def _damage_control_resuscitation(self, vitals, blood_loss_ml, blood_infused_ml, crystalloid_infused_ml):
+        """Damage control - prioritize blood, limit crystalloid to 2L."""
+        new = self.settings.copy()
+        map_mmhg = vitals.get('map_mmhg', 70)
+        max_crystalloid = max(0, 2000 - crystalloid_infused_ml)
+
+        if map_mmhg < 50:
+            new['blood_rate_ml_min'] = 200
+            new['crystalloid_rate_ml_min'] = min(100, max_crystalloid / 10) if max_crystalloid > 0 else 0
+            new['next_interval_s'] = 10
+        elif map_mmhg < 60:
+            new['blood_rate_ml_min'] = 150
+            new['crystalloid_rate_ml_min'] = min(50, max_crystalloid / 20) if max_crystalloid > 0 else 0
+            new['next_interval_s'] = 15
+        elif map_mmhg > 65:
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 50)
+            new['crystalloid_rate_ml_min'] = 0
+            new['next_interval_s'] = 30
+        else:
+            new['blood_rate_ml_min'] = max(0, self.settings.get('blood_rate_ml_min', 0) - 25)
+            new['crystalloid_rate_ml_min'] = 0
+            new['next_interval_s'] = 20
+
+        self.settings = new.copy()
+        return new
+
+    def shutdown(self):
+        pass
+
+class BatchHTTPFluidController:
+    """HTTP-based fluid controller for batch simulation workers."""
+
+    def __init__(self, base_url, config=None, timeout=10.0, simulation_context=None):
+        import requests
+        self.requests = requests
+        self.base_url = base_url.rstrip('/')
+        self.config = config or {}
+        self.timeout = timeout
+        self.data_requests = []
+        self.next_update_s = 10.0
+        self.initialized = False
+        self.last_error = None
+        # Simulation context for concurrent batch identification
+        self.simulation_context = simulation_context or {}
+        self.simulation_id = self.simulation_context.get('simulation_id', '')
+        self.batch_id = self.simulation_context.get('batch_id', '')
+        self.job_id = self.simulation_context.get('job_id', '')
+
+    def send_init(self, patient, fluid_settings):
+        payload = {
+            "patient": patient,
+            "fluid_settings": fluid_settings,
+            "config": self.config,
+            "simulation_id": self.simulation_id,
+            "batch_id": self.batch_id,
+            "job_id": self.job_id
+        }
+
+        try:
+            resp = self.requests.post(
+                f"{self.base_url}/init",
+                json=payload,
+                timeout=self.timeout
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("status") != "ok":
+                raise RuntimeError(f"Fluid controller init failed: {data.get('error', 'unknown error')}")
+
+            self.data_requests = data.get("data_requests", [])
+            self.next_update_s = data.get("next_update_s", 10.0)
+            self.initialized = True
+            self.last_error = None
+
+            return self.data_requests
+
+        except self.requests.exceptions.RequestException as e:
+            self.last_error = f"HTTP error during init: {e}"
+            raise RuntimeError(self.last_error)
+        except (KeyError, ValueError) as e:
+            self.last_error = f"Invalid controller response: {e}"
+            raise RuntimeError(self.last_error)
+
+    def step(self, vitals, current_settings, blood_loss_ml=0, blood_infused_ml=0, crystalloid_infused_ml=0):
+        if not self.initialized:
+            return None
+
+        sim_time = vitals.pop("sim_time_s", 0.0) if "sim_time_s" in vitals else 0.0
+
+        payload = {
+            "sim_time_s": sim_time,
+            "data": vitals,
+            "blood_loss_ml": blood_loss_ml,
+            "blood_infused_ml": blood_infused_ml,
+            "crystalloid_infused_ml": crystalloid_infused_ml,
+            "simulation_id": self.simulation_id,
+            "batch_id": self.batch_id,
+            "job_id": self.job_id
+        }
+
+        try:
+            resp = self.requests.post(
+                f"{self.base_url}/update",
+                json=payload,
+                timeout=self.timeout
+            )
+            resp.raise_for_status()
+            response = resp.json()
+
+            if "next_update_s" in response:
+                self.next_update_s = max(1.0, response["next_update_s"])
+
+            commands = response.get("commands", {})
+            result = current_settings.copy()
+            result.update(commands)
+            result["next_interval_s"] = self.next_update_s
+
+            self.last_error = None
+            return result
+
+        except self.requests.exceptions.Timeout:
+            self.last_error = f"Fluid controller timeout after {self.timeout}s"
+            print(f"[BatchHTTPFluidController] {self.last_error}")
+            return None
+        except self.requests.exceptions.RequestException as e:
+            self.last_error = f"HTTP error: {e}"
+            print(f"[BatchHTTPFluidController] {self.last_error}")
+            return None
+        except Exception as e:
+            self.last_error = f"Error parsing response: {e}"
+            print(f"[BatchHTTPFluidController] {self.last_error}")
+            return None
+
+    def shutdown(self):
+        if not self.initialized:
+            return
+        try:
+            payload = {
+                "simulation_id": self.simulation_id,
+                "batch_id": self.batch_id,
+                "job_id": self.job_id
+            }
+            self.requests.post(f"{self.base_url}/shutdown", json=payload, timeout=2.0)
+        except:
+            pass
