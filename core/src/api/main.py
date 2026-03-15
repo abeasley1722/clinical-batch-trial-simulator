@@ -1,3 +1,11 @@
+""" 
+============================================================
+Author:        Zachary Kao
+Date Created:  2026-03-14
+Description:   API endpoints for the Pulse server
+============================================================ 
+"""
+
 import os
 import sys
 import threading

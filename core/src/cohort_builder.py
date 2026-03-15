@@ -1,0 +1,426 @@
+"""
+Soldier Cohort Generator for Digital Clinical Trials
+
+Generates a population of virtual soldiers with physiologically plausible
+parameter distributions, then batch-stabilizes them using Pulse.
+
+Output: A folder of pre-stabilized patient states (.json) ready for
+rapid loading in simulation scenarios.
+
+Usage:
+    python generate_soldier_cohort.py --count 200 --output ./soldier_cohort
+    python generate_soldier_cohort.py --count 50 --output ./test_cohort --workers 4
+    
+Typical runtime: ~2-3 minutes per patient for stabilization
+    - 50 patients with 4 workers: ~30-40 min
+    - 200 patients with 8 workers: ~1-1.5 hours
+"""
+
+import os
+import sys
+import json
+import argparse
+import random
+import hashlib
+from datetime import datetime
+from pathlib import Path
+from dataclasses import dataclass, asdict
+from typing import List, Optional
+from multiprocessing import Pool, cpu_count
+
+from vital_ranges import SOLDIER
+
+# === PATH SETUP ===
+PULSE_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)),"pulse_engine")
+PULSE_BIN = os.path.join(PULSE_HOME, "bin")
+PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
+
+sys.path.insert(0, PULSE_PYTHON)
+sys.path.insert(0, PULSE_BIN)
+os.add_dll_directory(PULSE_BIN)
+
+@dataclass
+class SoldierProfile:
+    """A virtual soldier's baseline characteristics."""
+    
+    # Identity
+    name: str
+    sex: str  # "Male" or "Female"
+    
+    # Demographics
+    age_yr: int
+    height_cm: float
+    weight_kg: float
+    
+    # Derived
+    bmi: float
+    body_surface_area_m2: float  # Mosteller formula
+    
+    # Baseline vitals
+    heart_rate_baseline: int
+    systolic_bp_baseline: int
+    diastolic_bp_baseline: int
+    respiration_rate_baseline: int
+    
+    # Metadata
+    seed: int
+    generated_at: str
+    
+    def to_pulse_config(self) -> dict:
+        """Convert to Pulse patient configuration format."""
+        return {
+            "Name": self.name,
+            "Sex": self.sex,
+            "Age": {"ScalarTime": {"Value": self.age_yr, "Unit": "yr"}},
+            "Height": {"ScalarLength": {"Value": self.height_cm, "Unit": "cm"}},
+            "Weight": {"ScalarMass": {"Value": self.weight_kg, "Unit": "kg"}},
+            "HeartRateBaseline": {"ScalarFrequency": {"Value": self.heart_rate_baseline, "Unit": "1/min"}},
+            "SystolicArterialPressureBaseline": {"ScalarPressure": {"Value": self.systolic_bp_baseline, "Unit": "mmHg"}},
+            "DiastolicArterialPressureBaseline": {"ScalarPressure": {"Value": self.diastolic_bp_baseline, "Unit": "mmHg"}},
+            "RespirationRateBaseline": {"ScalarFrequency": {"Value": self.respiration_rate_baseline, "Unit": "1/min"}},
+        }
+
+
+class SoldierGenerator:
+    """
+    Generates physiologically plausible soldier profiles.
+    
+    Based on typical military demographics and fitness standards.
+    """
+    
+    def __init__(self, seed: Optional[int] = None):
+        """Initialize generator with optional seed for reproducibility."""
+        self.base_seed = seed if seed is not None else random.randint(0, 2**32 - 1)
+        self.rng = random.Random(self.base_seed)
+        self.count = 0
+    
+    def _clamp(self, value: float, min_val: float, max_val: float) -> float:
+        """Clamp value to range."""
+        return max(min_val, min(max_val, value))
+    
+    def _normal(self, mean: float, std: float, min_val: float = None, max_val: float = None) -> float:
+        """Sample from normal distribution, optionally clamped."""
+        value = self.rng.gauss(mean, std)
+        if min_val is not None or max_val is not None:
+            value = self._clamp(value, min_val or float('-inf'), max_val or float('inf'))
+        return value
+    
+    def _calculate_bsa(self, height_cm: float, weight_kg: float) -> float:
+        """Calculate body surface area using Mosteller formula."""
+        return ((height_cm * weight_kg) / 3600) ** 0.5
+    
+    def generate_one(self) -> SoldierProfile:
+        """Generate a single soldier profile."""
+        self.count += 1
+        
+        # Deterministic seed for this soldier (reproducible)
+        soldier_seed = self.base_seed + self.count
+        self.rng.seed(soldier_seed)
+        
+        # Sex
+        is_female = self.rng.random() < self.FEMALE_PROPORTION
+        sex = "Female" if is_female else "Male"
+        
+        # Age (truncated normal)
+        age = int(self._normal(self.AGE_MEAN, self.AGE_STD, *self.AGE_RANGE))
+        
+        # Height based on sex
+        if is_female:
+            height = self._normal(self.FEMALE_HEIGHT_MEAN, self.FEMALE_HEIGHT_STD)
+        else:
+            height = self._normal(self.MALE_HEIGHT_MEAN, self.MALE_HEIGHT_STD)
+        height = round(height, 1)
+        
+        # BMI -> Weight
+        bmi = self._normal(self.BMI_MEAN, self.BMI_STD, self.BMI_MIN, self.BMI_MAX)
+        weight = bmi * (height / 100) ** 2
+        weight = round(weight, 1)
+        bmi = round(bmi, 1)
+        
+        # Body surface area
+        bsa = round(self._calculate_bsa(height, weight), 2)
+        
+        # Heart rate (sex-dependent)
+        if is_female:
+            hr = int(self._normal(self.FEMALE_HR_MEAN, self.FEMALE_HR_STD, self.HR_MIN, self.HR_MAX))
+        else:
+            hr = int(self._normal(self.MALE_HR_MEAN, self.MALE_HR_STD, self.HR_MIN, self.HR_MAX))
+        
+        # Blood pressure (correlated - higher SBP tends to have higher DBP)
+        sbp = int(self._normal(self.SBP_MEAN, self.SBP_STD, self.SBP_MIN, self.SBP_MAX))
+        # DBP correlates with SBP
+        dbp_offset = (sbp - self.SBP_MEAN) * 0.5  # Partial correlation
+        dbp = int(self._normal(self.DBP_MEAN + dbp_offset, self.DBP_STD * 0.7, self.DBP_MIN, self.DBP_MAX))
+        
+        # Respiration rate
+        rr = int(self._normal(self.RR_MEAN, self.RR_STD, self.RR_MIN, self.RR_MAX))
+        
+        # Generate name (Soldier_XXX where XXX is hash-based for reproducibility)
+        name_hash = hashlib.md5(f"{soldier_seed}".encode()).hexdigest()[:6].upper()
+        name = f"Soldier_{name_hash}"
+        
+        return SoldierProfile(
+            name=name,
+            sex=sex,
+            age_yr=age,
+            height_cm=height,
+            weight_kg=weight,
+            bmi=bmi,
+            body_surface_area_m2=bsa,
+            heart_rate_baseline=hr,
+            systolic_bp_baseline=sbp,
+            diastolic_bp_baseline=dbp,
+            respiration_rate_baseline=rr,
+            seed=soldier_seed,
+            generated_at=datetime.now().isoformat()
+        )
+    
+    def generate_cohort(self, n: int) -> List[SoldierProfile]:
+        """Generate n soldier profiles."""
+        return [self.generate_one() for _ in range(n)]
+
+
+def stabilize_patient(args) -> dict:
+    """
+    Stabilize a single patient using Pulse.
+    
+    This runs in a separate process, so must set up Pulse independently.
+    Returns dict with status and path to stabilized state.
+    """
+    profile_dict, output_dir, pulse_bin, pulse_python = args
+    profile = SoldierProfile(**profile_dict)
+    
+    try:
+        # Set up Pulse paths for this worker
+        import sys
+        if pulse_python not in sys.path:
+            sys.path.insert(0, pulse_python)
+        if pulse_bin not in sys.path:
+            sys.path.insert(0, pulse_bin)
+        
+        if hasattr(os, 'add_dll_directory'):
+            try:
+                os.add_dll_directory(pulse_bin)
+            except OSError:
+                pass
+        
+        os.chdir(pulse_bin)
+        
+        # Import Pulse
+        from pulse.engine.PulseEngine import PulseEngine
+        from pulse.cdm.engine import SEDataRequestManager, SEDataRequest
+        from pulse.cdm.patient import SEPatientConfiguration, eSex
+        from pulse.cdm.scalars import FrequencyUnit, PressureUnit, TimeUnit, LengthUnit, MassUnit
+        
+        # Create engine
+        pulse = PulseEngine()
+        safe_name = profile.name.replace(' ', '_')
+        pulse.set_log_filename(f"./test_results/stabilize_{safe_name}.log")
+        pulse.log_to_console(False)
+        
+        # Configure patient
+        pc = SEPatientConfiguration()
+        p = pc.get_patient()
+        
+        p.set_name(profile.name)
+        p.set_sex(eSex.Female if profile.sex == "Female" else eSex.Male)
+        p.get_age().set_value(profile.age_yr, TimeUnit.yr)
+        p.get_height().set_value(profile.height_cm, LengthUnit.cm)
+        p.get_weight().set_value(profile.weight_kg, MassUnit.kg)
+        p.get_heart_rate_baseline().set_value(profile.heart_rate_baseline, FrequencyUnit.Per_min)
+        p.get_systolic_arterial_pressure_baseline().set_value(profile.systolic_bp_baseline, PressureUnit.mmHg)
+        p.get_diastolic_arterial_pressure_baseline().set_value(profile.diastolic_bp_baseline, PressureUnit.mmHg)
+        p.get_respiration_rate_baseline().set_value(profile.respiration_rate_baseline, FrequencyUnit.Per_min)
+        
+        pc.set_data_root_dir("./")
+        
+        # Minimal data requests for stabilization
+        data_requests = [
+            SEDataRequest.create_physiology_request("HeartRate", unit=FrequencyUnit.Per_min),
+            SEDataRequest.create_physiology_request("OxygenSaturation"),
+        ]
+        data_mgr = SEDataRequestManager(data_requests)
+        
+        # Initialize (stabilize) - this takes ~2-3 minutes
+        if not pulse.initialize_engine(pc, data_mgr):
+            return {
+                'status': 'error',
+                'name': profile.name,
+                'message': 'Stabilization failed'
+            }
+        
+        # Save stabilized state
+        output_path = os.path.join(output_dir, f"{profile.name}@0s.json")
+        
+        # Pulse saves state relative to its working directory
+        # We need to use a relative path or handle this carefully
+        rel_output = os.path.relpath(output_path, pulse_bin)
+        
+        # Serialize to file
+        if not pulse.serialize_to_file(rel_output):
+            return {
+                'status': 'error',
+                'name': profile.name,
+                'message': 'Failed to save state'
+            }
+        
+        return {
+            'status': 'success',
+            'name': profile.name,
+            'path': output_path
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            'status': 'error',
+            'name': profile.name,
+            'message': str(e),
+            'traceback': traceback.format_exc()
+        }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Generate a cohort of virtual soldiers for digital clinical trials',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Generate 50 soldiers for testing
+    python generate_soldier_cohort.py --count 50 --output ./test_cohort
+    
+    # Generate 200 soldiers with specific seed (reproducible)
+    python generate_soldier_cohort.py --count 200 --output ./soldier_cohort --seed 42
+    
+    # Just generate profiles without stabilizing (fast, for inspection)
+    python generate_soldier_cohort.py --count 10 --output ./inspect --no-stabilize
+    
+    # Use more workers for faster stabilization
+    python generate_soldier_cohort.py --count 100 --output ./cohort --workers 8
+        """
+    )
+    
+    parser.add_argument('--count', type=int, default=50,
+                        help='Number of soldiers to generate (default: 50)')
+    parser.add_argument('--output', type=str, default='./soldier_cohort',
+                        help='Output directory for stabilized states (default: ./soldier_cohort)')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Random seed for reproducibility (default: random)')
+    parser.add_argument('--workers', type=int, default=None,
+                        help='Number of parallel workers (default: CPU count - 1)')
+    parser.add_argument('--no-stabilize', action='store_true',
+                        help='Only generate profiles, skip stabilization')
+    parser.add_argument('--pulse-home', type=str, default=PULSE_HOME,
+                        help=f'Pulse installation directory (default: {PULSE_HOME})')
+    
+    args = parser.parse_args()
+    
+    # Update Pulse paths if specified
+    pulse_home = args.pulse_home
+    pulse_bin = os.path.join(pulse_home, "install", "bin")
+    pulse_python = os.path.join(pulse_home, "install", "python")
+    
+    # Create output directory
+    output_dir = os.path.abspath(args.output)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Generate profiles
+    print(f"\n{'='*60}")
+    print(f"  SOLDIER COHORT GENERATOR")
+    print(f"{'='*60}")
+    print(f"  Count: {args.count}")
+    print(f"  Output: {output_dir}")
+    print(f"  Seed: {args.seed or 'random'}")
+    print(f"{'='*60}\n")
+    
+    generator = SoldierGenerator(seed=args.seed)
+    cohort = generator.generate_cohort(args.count)
+    
+    # Save cohort manifest
+    manifest = {
+        'generated_at': datetime.now().isoformat(),
+        'count': len(cohort),
+        'seed': generator.base_seed,
+        'parameters': {
+            'age_range': generator.AGE_RANGE,
+            'female_proportion': generator.FEMALE_PROPORTION,
+            'bmi_range': (generator.BMI_MIN, generator.BMI_MAX),
+        },
+        'patients': [asdict(p) for p in cohort]
+    }
+    
+    manifest_path = os.path.join(output_dir, 'cohort_manifest.json')
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+    print(f"Saved cohort manifest: {manifest_path}")
+    
+    # Print summary statistics
+    males = sum(1 for p in cohort if p.sex == "Male")
+    females = len(cohort) - males
+    ages = [p.age_yr for p in cohort]
+    bmis = [p.bmi for p in cohort]
+    
+    print(f"\nCohort Summary:")
+    print(f"  Sex: {males} male ({100*males/len(cohort):.1f}%), {females} female ({100*females/len(cohort):.1f}%)")
+    print(f"  Age: {min(ages)}-{max(ages)} yr (mean {sum(ages)/len(ages):.1f})")
+    print(f"  BMI: {min(bmis):.1f}-{max(bmis):.1f} (mean {sum(bmis)/len(bmis):.1f})")
+    
+    if args.no_stabilize:
+        print(f"\nSkipping stabilization (--no-stabilize)")
+        print(f"Profiles saved to manifest. Run without --no-stabilize to create Pulse states.")
+        return
+    
+    # Stabilize patients in parallel
+    num_workers = args.workers or max(1, cpu_count() - 1)
+    print(f"\nStabilizing {len(cohort)} patients with {num_workers} workers...")
+    print(f"Estimated time: {len(cohort) * 2.5 / num_workers:.0f}-{len(cohort) * 3.5 / num_workers:.0f} minutes\n")
+    
+    # Prepare arguments for worker processes
+    work_items = [
+        (asdict(profile), output_dir, pulse_bin, pulse_python)
+        for profile in cohort
+    ]
+    
+    # Run stabilization
+    from multiprocessing import freeze_support
+    freeze_support()
+    
+    results = []
+    completed = 0
+    failed = 0
+    
+    with Pool(num_workers) as pool:
+        for result in pool.imap_unordered(stabilize_patient, work_items):
+            completed += 1
+            if result['status'] == 'success':
+                print(f"  [{completed}/{len(cohort)}] ✓ {result['name']}")
+            else:
+                failed += 1
+                print(f"  [{completed}/{len(cohort)}] ✗ {result['name']}: {result.get('message', 'Unknown error')}")
+            results.append(result)
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print(f"  COMPLETE")
+    print(f"{'='*60}")
+    print(f"  Success: {completed - failed}/{len(cohort)}")
+    print(f"  Failed: {failed}")
+    print(f"  Output: {output_dir}")
+    print(f"{'='*60}\n")
+    
+    # Update manifest with stabilization results
+    manifest['stabilization'] = {
+        'completed_at': datetime.now().isoformat(),
+        'success': completed - failed,
+        'failed': failed,
+        'results': results
+    }
+    
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+
+
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
+    main()

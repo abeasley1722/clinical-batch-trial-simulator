@@ -1,3 +1,10 @@
+""" 
+============================================================
+Author:        Zachary Kao
+Date Created:  2026-03-14
+Description:   Controller definitions for both built-in and HTTP-based controllers.
+============================================================ 
+"""
 
 import requests as http_requests
 
