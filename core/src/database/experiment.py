@@ -14,6 +14,8 @@ Description:    Defines the Experiment object that represents a simulation reque
 ============================================================ 
 """
 
+import datetime
+
 import patient
 import scenario
 import metric
@@ -43,7 +45,7 @@ class Experiment:
         """
         return cls(
             name = json_data.get("name"),
-            #TODO: generate experiment_id. perhaps YYYYMMDD_RUN#?
+            experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S"),
             patients = patient_list,
             simulation_duration = json_data.get("duration_s", 0),
             events = json_data.get("events", []) 

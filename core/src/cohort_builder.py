@@ -80,7 +80,7 @@ class SoldierProfile:
             "RespirationRateBaseline": {"ScalarFrequency": {"Value": self.respiration_rate_baseline, "Unit": "1/min"}},
         }
 
-
+#TODO: extend to accept other demographic groups
 class SoldierGenerator:
     """
     Generates physiologically plausible soldier profiles.
@@ -118,21 +118,21 @@ class SoldierGenerator:
         self.rng.seed(soldier_seed)
         
         # Sex
-        is_female = self.rng.random() < self.FEMALE_PROPORTION
+        is_female = self.rng.random() < SOLDIER.female_proportion
         sex = "Female" if is_female else "Male"
         
         # Age (truncated normal)
-        age = int(self._normal(self.AGE_MEAN, self.AGE_STD, *self.AGE_RANGE))
+        age = int(self._normal(SOLDIER.age_mean, SOLDIER.age_std, SOLDIER.age_min, SOLDIER.age_max))
         
         # Height based on sex
         if is_female:
-            height = self._normal(self.FEMALE_HEIGHT_MEAN, self.FEMALE_HEIGHT_STD)
+            height = self._normal(SOLDIER.female_height_mean, SOLDIER.female_height_std)
         else:
-            height = self._normal(self.MALE_HEIGHT_MEAN, self.MALE_HEIGHT_STD)
+            height = self._normal(SOLDIER.male_height_mean, SOLDIER.male_height_std)
         height = round(height, 1)
         
         # BMI -> Weight
-        bmi = self._normal(self.BMI_MEAN, self.BMI_STD, self.BMI_MIN, self.BMI_MAX)
+        bmi = self._normal(SOLDIER.bmi_mean, SOLDIER.bmi_std, SOLDIER.bmi_min, SOLDIER.bmi_max)
         weight = bmi * (height / 100) ** 2
         weight = round(weight, 1)
         bmi = round(bmi, 1)
@@ -142,18 +142,18 @@ class SoldierGenerator:
         
         # Heart rate (sex-dependent)
         if is_female:
-            hr = int(self._normal(self.FEMALE_HR_MEAN, self.FEMALE_HR_STD, self.HR_MIN, self.HR_MAX))
+            hr = int(self._normal(SOLDIER.female_hr_mean, SOLDIER.female_hr_std, SOLDIER.hr_min, SOLDIER.hr_max))
         else:
-            hr = int(self._normal(self.MALE_HR_MEAN, self.MALE_HR_STD, self.HR_MIN, self.HR_MAX))
+            hr = int(self._normal(SOLDIER.male_hr_mean, SOLDIER.male_hr_std, SOLDIER.hr_min, SOLDIER.hr_max))
         
         # Blood pressure (correlated - higher SBP tends to have higher DBP)
-        sbp = int(self._normal(self.SBP_MEAN, self.SBP_STD, self.SBP_MIN, self.SBP_MAX))
+        sbp = int(self._normal(SOLDIER.sbp_mean, SOLDIER.sbp_std, SOLDIER.sbp_min, SOLDIER.sbp_max))
         # DBP correlates with SBP
-        dbp_offset = (sbp - self.SBP_MEAN) * 0.5  # Partial correlation
-        dbp = int(self._normal(self.DBP_MEAN + dbp_offset, self.DBP_STD * 0.7, self.DBP_MIN, self.DBP_MAX))
+        dbp_offset = (sbp - SOLDIER.sbp_mean) * 0.5  # Partial correlation
+        dbp = int(self._normal(SOLDIER.dbp_mean + dbp_offset, SOLDIER.dbp_std * 0.7, SOLDIER.dbp_min, SOLDIER.dbp_max))
         
         # Respiration rate
-        rr = int(self._normal(self.RR_MEAN, self.RR_STD, self.RR_MIN, self.RR_MAX))
+        rr = int(self._normal(SOLDIER.rr_mean, SOLDIER.rr_std, SOLDIER.rr_min, SOLDIER.rr_max))
         
         # Generate name (Soldier_XXX where XXX is hash-based for reproducibility)
         name_hash = hashlib.md5(f"{soldier_seed}".encode()).hexdigest()[:6].upper()
@@ -250,6 +250,7 @@ def stabilize_patient(args) -> dict:
             }
         
         # Save stabilized state
+        #TODO: save to proper location in database
         output_path = os.path.join(output_dir, f"{profile.name}@0s.json")
         
         # Pulse saves state relative to its working directory

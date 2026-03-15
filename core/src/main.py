@@ -6,6 +6,7 @@ Description:   Main entry point for the core simulation server.
 ============================================================ 
 """
 
+from dataclasses import asdict
 import os
 import sys
 import json
@@ -27,6 +28,8 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
 from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
+from cohort_builder import SoldierGenerator, stabilize_patient
+from database.experiment import Experiment
 
 # === PATH SETUP ===
 PULSE_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)),"pulse_engine")
@@ -1748,10 +1751,59 @@ def run_batch_thread(batch_id, batch):
     """
     print(f"[BATCH] run_batch_thread started for {batch_id}")
 
+    patient_count = batch.get('patient_count', 0) #TODO: verify json body field name
+    patient_count = 5 #TODO: Temporary override for testing - remove when database integration is done   
+    patients = []
     #TODO: draw patients from database
-    #TODO: generate patients if not enough patients in database match criteria
-    #TODO: generate experiment object
+    """
+    patients += draw_patients_from_database(criteria, count=patient_count)
+    patient_count -= len(patients)
 
+    """
+
+    #generate patients if not enough patients in database match criteria
+    generator = SoldierGenerator('random') #TODO: expand to take demographic criteria from batch config, better random seed?
+    generated_patients = generator.generate_cohort(patient_count)
+
+    # Stabilize patients in parallel
+    num_workers = args.workers or max(1, os.cpu_count() - 1)
+    print(f"\nStabilizing {len(generated_patients)} patients with {num_workers} workers...")
+    print(f"Estimated time: {len(generated_patients) * 2.5 / num_workers:.0f}-{len(generated_patients) * 3.5 / num_workers:.0f} minutes\n")
+    
+    # Prepare arguments for worker processes
+    #TODO: edit output_dir to database output path when database integration is done
+    output_dir = os.path.join(RESULTS_FOLDER, f"batch_{batch_id}_output")
+    work_items = [
+        (asdict(profile), output_dir, PULSE_BIN, PULSE_PYTHON)
+        for profile in generated_patients
+    ]
+    
+    # Run stabilization
+    from multiprocessing import freeze_support
+    freeze_support()
+    
+    results = []
+    completed = 0
+    failed = 0
+    
+    #TODO: verify stabilize_patient is working as intended and saves data to database properly
+    with ProcessPool(num_workers) as pool:
+        for result in pool.imap_unordered(stabilize_patient, work_items):
+            completed += 1
+            if result['status'] == 'success':
+                print(f"  [{completed}/{len(generated_patients)}] ✓ {result['name']}")
+            else:
+                failed += 1
+                print(f"  [{completed}/{len(generated_patients)}] ✗ {result['name']}: {result.get('message', 'Unknown error')}")
+            results.append(result)
+
+    #add generated patients to cohort
+    patients += [r['name'] for r in results if r['status'] == 'success']
+
+    #generate experiment object
+    experiment = Experiment.from_json(batch, patients)
+
+    #TODO: remove when Experiment object integration is done
     pre_stabilized = batch.get('patients', [])
     custom_patients = batch.get('custom_patients', [])  # List of {name, json}
     duration_s = batch.get('duration_s', 300)
@@ -1807,7 +1859,7 @@ def run_batch_thread(batch_id, batch):
     
     try:
         # Create output directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = experiment.experiment_id  # Use experiment ID as timestamp for better traceability
         batch_dir = os.path.join(RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
         os.makedirs(batch_dir, exist_ok=True)
         
@@ -1835,7 +1887,14 @@ def run_batch_thread(batch_id, batch):
         # Custom: pass dict with {name, json}
         # Include replicate info for file naming
         # Cancellation is checked via file-based flag, not passed in args
+        #TODO: use experiment object?
         patient_args = []
+        for p in patients:
+            #TODO: add in replicates if needed
+            job_id = p
+            config = batch_config.copy() #TODO: use experiment object?
+            patient_args.append((p, config, batch_dir, job_id))
+        """
         for p in pre_stabilized:
             for rep in range(1, replicates + 1):
                 job_id = f"{p}_r{rep}" if replicates > 1 else p
@@ -1850,6 +1909,7 @@ def run_batch_thread(batch_id, batch):
                 config_with_rep['replicate'] = rep
                 config_with_rep['replicate_suffix'] = f"_r{rep}" if replicates > 1 else ""
                 patient_args.append((cp, config_with_rep, batch_dir, job_id))
+        """
 
         # Run with ProcessPool using apply_async for non-blocking cancellation support
         print(f"Starting batch {batch_id} with {workers} workers for {total_jobs} jobs "
@@ -1862,6 +1922,7 @@ def run_batch_thread(batch_id, batch):
         with ProcessPool(processes=workers) as pool:
             # Submit all jobs asynchronously
             async_results = []
+            #TODO: use experiment object?
             for args in patient_args:
                 async_results.append(pool.apply_async(run_single_patient, (args,)))
 
