@@ -3,6 +3,14 @@
 # Author:        Jared Garcia
 # Date Created:  2026-03-14
 # Description:   Local dev runner — sets up the environment and starts the simulator
+#
+# Merge notes (branch 72-create-the-experiment-object):
+#   1. os.add_dll_directory() in core/src/main.py is Windows-only and will
+#      crash on Linux/WSL — that line must be removed before merging.
+#   2. core/src/main.py hardcodes its own Pulse engine path via sys.path.insert().
+#      This script also sets PYTHONPATH for Pulse, so there is overlap.
+#      If main.py is updated to rely on PYTHONPATH instead, remove its
+#      hardcoded path setup to avoid conflicts.
 # ============================================================
 set -e
 
@@ -53,13 +61,17 @@ if [ ! -d "$PROJECT_ROOT/.venv" ]; then
 fi
 
 # jump into the virtual environment
-echo "[2/3] Activating virtual environment..."
+echo "[2/4] Activating virtual environment..."
 source "$PROJECT_ROOT/.venv/bin/activate"
+
+# install dependencies
+echo "[3/4] Installing dependencies..."
+pip install -r "$PROJECT_ROOT/requirements.txt"
 
 # tell Python where to find Pulse and our own code
 export PYTHONPATH="$PULSE_BIN:$PULSE_PYTHON:$PROJECT_ROOT/core/src:$PYTHONPATH"
 
-echo "[3/3] Starting clinical-batch-trial-simulator..."
+echo "[4/4] Starting clinical-batch-trial-simulator..."
 echo "  Project root : $PROJECT_ROOT"
 echo "  Pulse home   : $PULSE_HOME"
 echo "  Entry point  : $ENTRYPOINT"
