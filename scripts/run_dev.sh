@@ -1,9 +1,9 @@
-============================================================
-Author:        Jared Garcia
-Date Created:  2026-03-14
-Description:   Local dev runner — sets up the environment and starts the simulator
-============================================================
 #!/usr/bin/env bash
+# ============================================================
+# Author:        Jared Garcia
+# Date Created:  2026-03-14
+# Description:   Local dev runner — sets up the environment and starts the simulator
+# ============================================================
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
