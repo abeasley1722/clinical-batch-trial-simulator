@@ -11,6 +11,7 @@
 #      This script also sets PYTHONPATH for Pulse, so there is overlap.
 #      If main.py is updated to rely on PYTHONPATH instead, remove its
 #      hardcoded path setup to avoid conflicts.
+#   3. ./scripts/run_dev.sh
 # ============================================================
 set -e
 
