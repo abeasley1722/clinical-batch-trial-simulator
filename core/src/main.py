@@ -11,6 +11,7 @@ import os
 import sys
 import json
 import threading
+import random
 import queue
 import uuid
 import time
@@ -23,6 +24,17 @@ import requests as http_requests
 from datetime import datetime
 from pathlib import Path
 
+# === PATH SETUP (MUST be before importing local modules) ===
+# Navigate up from core/src to project root, then into pulse_engine
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
+PULSE_BIN = os.path.join(PULSE_HOME, "bin")
+PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
+
+sys.path.insert(0, PULSE_PYTHON)
+sys.path.insert(0, PULSE_BIN)
+os.add_dll_directory(PULSE_BIN)
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
@@ -30,15 +42,6 @@ from flask_socketio import SocketIO, emit
 from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
 from cohort_builder import SoldierGenerator, stabilize_patient
 from database.experiment import Experiment
-
-# === PATH SETUP ===
-PULSE_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)),"pulse_engine")
-PULSE_BIN = os.path.join(PULSE_HOME, "bin")
-PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
-
-sys.path.insert(0, PULSE_PYTHON)
-sys.path.insert(0, PULSE_BIN)
-os.add_dll_directory(PULSE_BIN)
 
 # === PULSE IMPORTS ===
 from pulse.engine.PulseEngine import PulseEngine, eModelType
@@ -617,7 +620,7 @@ def run_single_patient(args):
             # Pre-stabilized patient - load state directly
             patient_path = f"./states/{patient_name}"
             if not pulse.serialize_from_file(patient_path, data_mgr):
-                raise RuntimeError(f"Failed to load patient: {patient_name}")
+                raise RuntimeError(f"Failed to load patient: {patient_name} at path: {patient_path}")
 
         # Capture initial blood volume for relative hemorrhage rates
         # Advance time slightly to ensure engine has computed state values
@@ -1751,22 +1754,38 @@ def run_batch_thread(batch_id, batch):
     """
     print(f"[BATCH] run_batch_thread started for {batch_id}")
 
-    patient_count = batch.get('patient_count', 0) #TODO: verify json body field name
-    patient_count = 5 #TODO: Temporary override for testing - remove when database integration is done   
+    # Initialize batch status in global dictionary to avoid KeyError during update
+    with batch_lock:
+        batches[batch_id] = {
+            'status': 'running',
+            'message': 'Batch started',
+            'patients': {},
+            'created_at': datetime.now().isoformat(),
+            'started_at': datetime.now().isoformat(),
+            'completed_count': 0,
+            'total_count': 0,
+            'batch_dir': None,
+            'zip_path': None,
+        }
+
+    patient_count = batch.get('patient_count', 0) #TODO: verify json body field name 
     patients = []
     #TODO: draw patients from database
     """
     patients += draw_patients_from_database(criteria, count=patient_count)
-    patient_count -= len(patients)
-
+    patient_count -= len(patients) 
+    #TODO: patient count needs to be more sophisticated than just a count, need to take demographic criteria into account
+    #maybe criteria can be a dict of demographic criteria and counts
     """
 
     #generate patients if not enough patients in database match criteria
-    generator = SoldierGenerator('random') #TODO: expand to take demographic criteria from batch config, better random seed?
+    generator = SoldierGenerator(random.seed()) #TODO: expand to take demographic criteria from batch config, better random seed?
     generated_patients = generator.generate_cohort(patient_count)
 
     # Stabilize patients in parallel
-    num_workers = args.workers or max(1, os.cpu_count() - 1)
+    num_workers = batch.get('workers', None)
+    if num_workers is None:
+        num_workers = max(1, (os.cpu_count() or 4) - 1)
     print(f"\nStabilizing {len(generated_patients)} patients with {num_workers} workers...")
     print(f"Estimated time: {len(generated_patients) * 2.5 / num_workers:.0f}-{len(generated_patients) * 3.5 / num_workers:.0f} minutes\n")
     
@@ -1791,19 +1810,28 @@ def run_batch_thread(batch_id, batch):
         for result in pool.imap_unordered(stabilize_patient, work_items):
             completed += 1
             if result['status'] == 'success':
-                print(f"  [{completed}/{len(generated_patients)}] ✓ {result['name']}")
+                print(f"  [{completed}/{len(generated_patients)}] OK {result['name']}")
             else:
                 failed += 1
-                print(f"  [{completed}/{len(generated_patients)}] ✗ {result['name']}: {result.get('message', 'Unknown error')}")
+                print(f"  [{completed}/{len(generated_patients)}] FAIL {result['name']}: {result.get('message', 'Unknown error')}")
             results.append(result)
 
     #add generated patients to cohort
     patients += [r['name'] for r in results if r['status'] == 'success']
 
     #generate experiment object
-    experiment = Experiment.from_json(batch, patients)
+    #experiment = Experiment.from_json(batch, patients)
+    experiment = Experiment(
+        name='Test Experiment',
+        experiment_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
+        patients=patients,
+        simulation_duration=300,
+        events=[],
+        output_columns=[]
+    ) #TODO: remove once we can test with JSON or from frontend input
 
     #TODO: remove when Experiment object integration is done
+    """
     pre_stabilized = batch.get('patients', [])
     custom_patients = batch.get('custom_patients', [])  # List of {name, json}
     duration_s = batch.get('duration_s', 300)
@@ -1813,8 +1841,11 @@ def run_batch_thread(batch_id, batch):
     base_patient_count = len(pre_stabilized) + len(custom_patients)
     total_jobs = base_patient_count * replicates
     print(f"[BATCH] {batch_id}: {base_patient_count} patients x {replicates} replicates = {total_jobs} jobs")
+    """
+    workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
+    total_jobs = len(patients)
     
-    if base_patient_count == 0:
+    if len(patients) == 0:
         with batch_lock:
             batches[batch_id]['status'] = 'error'
             batches[batch_id]['message'] = 'No patients selected'
@@ -1823,14 +1854,15 @@ def run_batch_thread(batch_id, batch):
 
     # Cap workers at CPU count and total job count
     max_workers = os.cpu_count() or 4
-    workers = min(workers, max_workers, total_jobs) if total_jobs > 0 else 1
+    workers = min(workers, max_workers, len(patients)) if len(patients) > 0 else 1
 
     # Initialize job progress tracking (patient x replicate combinations)
     with batch_lock:
-        batches[batch_id]['replicates'] = replicates
-        batches[batch_id]['base_patient_count'] = base_patient_count
-        batches[batch_id]['total_jobs'] = total_jobs
+        #batches[batch_id]['replicates'] = replicates
+        batches[batch_id]['patient_count'] = len(patients)
+        batches[batch_id]['total_jobs'] = len(patients)
 
+        """
         # Pre-stabilized patients x replicates
         for p in pre_stabilized:
             for rep in range(1, replicates + 1):
@@ -1856,6 +1888,16 @@ def run_batch_thread(batch_id, batch):
                     'base_patient': cp['name']
                 }
         batches[batch_id]['workers'] = workers
+        """
+        for p in patients:
+            job_id = p
+            batches[batch_id]['patients'][job_id] = {
+                'status': 'queued',
+                'sim_time': 0,
+                'duration': experiment.simulation_duration,
+                'is_custom': False,
+                'base_patient': p #TODO: probably dont need base patient and is custom
+            }
     
     try:
         # Create output directory
@@ -1868,14 +1910,14 @@ def run_batch_thread(batch_id, batch):
         # v6: start_intubated defaults to False - use events for intubation/ventilation
         batch_config = {
             'batch_id': batch_id,  # For HTTP controller concurrent identification
-            'duration_s': duration_s,
+            'duration_s': experiment.simulation_duration,
             'sample_rate_hz': batch.get('sample_rate_hz', 50),
             'start_intubated': batch.get('start_intubated', False),
             'vent_settings': batch.get('vent_settings', {}),
-            'events': batch.get('events', []),
+            'events': experiment.events,
             'pulse_bin': PULSE_BIN,
             'pulse_python': PULSE_PYTHON,
-            'output_columns': batch.get('output_columns'),
+            'output_columns': experiment.output_columns,
             'available_variables': AVAILABLE_VARIABLES,
         }
 
@@ -1912,8 +1954,7 @@ def run_batch_thread(batch_id, batch):
         """
 
         # Run with ProcessPool using apply_async for non-blocking cancellation support
-        print(f"Starting batch {batch_id} with {workers} workers for {total_jobs} jobs "
-              f"({base_patient_count} patients x {replicates} replicates)")
+        print(f"Starting batch {batch_id} with {workers} workers for {total_jobs} jobs")
 
         csv_paths = {}
         completed = 0
@@ -2057,5 +2098,17 @@ if __name__ == '__main__':
     print("="*60)
     print("  Connect with pulse_gui.py or any HTTP client")
     print("="*60 + "\n")
+
+    print("Running test of batch simulation")
+    run_batch_thread("test_batch", {
+        'patient_count': 5,
+        'duration_s': 60,
+        'sample_rate_hz': 50,
+        'start_intubated': False,
+        'vent_settings': {},
+        'events': [],
+        'workers': 4,
+        'replicates': 1
+    })
 
     socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)

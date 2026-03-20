@@ -15,6 +15,17 @@ import requests as http_requests
 from datetime import datetime
 from pathlib import Path
 
+# === PATH SETUP (MUST be before importing local modules) ===
+# Navigate up from core/src/api to project root, then into pulse_engine
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
+PULSE_BIN = os.path.join(PULSE_HOME, "bin")
+PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
+
+sys.path.insert(0, PULSE_PYTHON)
+sys.path.insert(0, PULSE_BIN)
+os.add_dll_directory(PULSE_BIN)
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
@@ -22,15 +33,6 @@ from flask_socketio import SocketIO, emit
 #TODO: change if single patient functions are removed
 from ..main import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
 from ..controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
-
-# === PATH SETUP ===
-PULSE_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)),"pulse_engine")
-PULSE_BIN = os.path.join(PULSE_HOME, "bin")
-PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
-
-sys.path.insert(0, PULSE_PYTHON)
-sys.path.insert(0, PULSE_BIN)
-os.add_dll_directory(PULSE_BIN)
 
 #TODO: refactor using FastAPI instead of Flask
 app = Flask(__name__)

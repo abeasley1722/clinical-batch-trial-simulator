@@ -28,16 +28,18 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional
 from multiprocessing import Pool, cpu_count
 
-from vital_ranges import SOLDIER
-
-# === PATH SETUP ===
-PULSE_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)),"pulse_engine")
+# === PATH SETUP (MUST be before importing local modules) ===
+# Navigate up from core/src to project root, then into pulse_engine
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
 PULSE_BIN = os.path.join(PULSE_HOME, "bin")
 PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
 
 sys.path.insert(0, PULSE_PYTHON)
 sys.path.insert(0, PULSE_BIN)
 os.add_dll_directory(PULSE_BIN)
+
+from vital_ranges import SOLDIER
 
 @dataclass
 class SoldierProfile:
@@ -187,6 +189,7 @@ def stabilize_patient(args) -> dict:
     This runs in a separate process, so must set up Pulse independently.
     Returns dict with status and path to stabilized state.
     """
+    #TODO: change from taking args, need to change output dir to the proper location in the database
     profile_dict, output_dir, pulse_bin, pulse_python = args
     profile = SoldierProfile(**profile_dict)
     
