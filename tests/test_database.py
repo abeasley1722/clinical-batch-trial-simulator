@@ -56,9 +56,9 @@ def test_insert_and_get_experiment():
 
 def test_insert_and_get_patient():
     from database.patient import insert_patient, get_patient
+    from database.cohort import insert_cohort, add_patient_to_cohort
 
     pid = insert_patient(
-        cohort_id="cohort-1",
         sex="M",
         age=25,
         height=175.0,
@@ -66,6 +66,9 @@ def test_insert_and_get_patient():
         json_file="patients/soldier_001.json",
         additional_descriptors={"fitness": "high"}
     )
+
+    cohort_id = insert_cohort("soldier", description="Military cohort")
+    add_patient_to_cohort(pid, cohort_id)
 
     row = get_patient(pid)
     assert row is not None
