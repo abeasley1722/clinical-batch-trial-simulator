@@ -14,7 +14,7 @@ Description:    Defines the Experiment object that represents a simulation reque
 ============================================================ 
 """
 
-import datetime
+from datetime import datetime
 
 from . import patient
 from . import scenario

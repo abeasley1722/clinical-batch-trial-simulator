@@ -22,6 +22,8 @@ import json
 import argparse
 import random
 import hashlib
+import uuid
+from database.patient import insert_patient
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -46,6 +48,7 @@ class SoldierProfile:
     """A virtual soldier's baseline characteristics."""
     
     # Identity
+    id : str
     name: str
     sex: str  # "Male" or "Female"
     
@@ -100,10 +103,10 @@ class SoldierGenerator:
         """Clamp value to range."""
         return max(min_val, min(max_val, value))
     
-    def _normal(self, mean: float, std: float, min_val: float = None, max_val: float = None) -> float:
+    def _normal(self, mean: float, std: float, min_val: float = 0, max_val: float = 0) -> float:
         """Sample from normal distribution, optionally clamped."""
         value = self.rng.gauss(mean, std)
-        if min_val is not None or max_val is not None:
+        if min_val != 0 or max_val != 0:
             value = self._clamp(value, min_val or float('-inf'), max_val or float('inf'))
         return value
     
@@ -158,10 +161,11 @@ class SoldierGenerator:
         rr = int(self._normal(SOLDIER.rr_mean, SOLDIER.rr_std, SOLDIER.rr_min, SOLDIER.rr_max))
         
         # Generate name (Soldier_XXX where XXX is hash-based for reproducibility)
-        name_hash = hashlib.md5(f"{soldier_seed}".encode()).hexdigest()[:6].upper()
+        name_hash = hashlib.md5(f"{soldier_seed}".encode()).hexdigest()[:8].upper()
         name = f"Soldier_{name_hash}"
         
         return SoldierProfile(
+            id = name_hash,
             name=name,
             sex=sex,
             age_yr=age,
@@ -268,10 +272,22 @@ def stabilize_patient(args) -> dict:
                 'message': 'Failed to save state'
             }
         
+        insert_patient(
+            cohort_id=None,
+            sex=profile.sex,
+            age=profile.age_yr,
+            height=profile.height_cm,
+            weight=profile.weight_kg,
+            json_file=rel_output,
+            additional_descriptors=None,
+            patient_id=profile.id
+        )
+
         return {
             'status': 'success',
             'name': profile.name,
-            'path': output_path
+            'id': profile.id,
+            'state_path': rel_output  # Path to stabilized state file
         }
         
     except Exception as e:
@@ -282,149 +298,3 @@ def stabilize_patient(args) -> dict:
             'message': str(e),
             'traceback': traceback.format_exc()
         }
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description='Generate a cohort of virtual soldiers for digital clinical trials',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-    # Generate 50 soldiers for testing
-    python generate_soldier_cohort.py --count 50 --output ./test_cohort
-    
-    # Generate 200 soldiers with specific seed (reproducible)
-    python generate_soldier_cohort.py --count 200 --output ./soldier_cohort --seed 42
-    
-    # Just generate profiles without stabilizing (fast, for inspection)
-    python generate_soldier_cohort.py --count 10 --output ./inspect --no-stabilize
-    
-    # Use more workers for faster stabilization
-    python generate_soldier_cohort.py --count 100 --output ./cohort --workers 8
-        """
-    )
-    
-    parser.add_argument('--count', type=int, default=50,
-                        help='Number of soldiers to generate (default: 50)')
-    parser.add_argument('--output', type=str, default='./soldier_cohort',
-                        help='Output directory for stabilized states (default: ./soldier_cohort)')
-    parser.add_argument('--seed', type=int, default=None,
-                        help='Random seed for reproducibility (default: random)')
-    parser.add_argument('--workers', type=int, default=None,
-                        help='Number of parallel workers (default: CPU count - 1)')
-    parser.add_argument('--no-stabilize', action='store_true',
-                        help='Only generate profiles, skip stabilization')
-    parser.add_argument('--pulse-home', type=str, default=PULSE_HOME,
-                        help=f'Pulse installation directory (default: {PULSE_HOME})')
-    
-    args = parser.parse_args()
-    
-    # Update Pulse paths if specified
-    pulse_home = args.pulse_home
-    pulse_bin = os.path.join(pulse_home, "install", "bin")
-    pulse_python = os.path.join(pulse_home, "install", "python")
-    
-    # Create output directory
-    output_dir = os.path.abspath(args.output)
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    
-    # Generate profiles
-    print(f"\n{'='*60}")
-    print(f"  SOLDIER COHORT GENERATOR")
-    print(f"{'='*60}")
-    print(f"  Count: {args.count}")
-    print(f"  Output: {output_dir}")
-    print(f"  Seed: {args.seed or 'random'}")
-    print(f"{'='*60}\n")
-    
-    generator = SoldierGenerator(seed=args.seed)
-    cohort = generator.generate_cohort(args.count)
-    
-    # Save cohort manifest
-    manifest = {
-        'generated_at': datetime.now().isoformat(),
-        'count': len(cohort),
-        'seed': generator.base_seed,
-        'parameters': {
-            'age_range': generator.AGE_RANGE,
-            'female_proportion': generator.FEMALE_PROPORTION,
-            'bmi_range': (generator.BMI_MIN, generator.BMI_MAX),
-        },
-        'patients': [asdict(p) for p in cohort]
-    }
-    
-    manifest_path = os.path.join(output_dir, 'cohort_manifest.json')
-    with open(manifest_path, 'w') as f:
-        json.dump(manifest, f, indent=2)
-    print(f"Saved cohort manifest: {manifest_path}")
-    
-    # Print summary statistics
-    males = sum(1 for p in cohort if p.sex == "Male")
-    females = len(cohort) - males
-    ages = [p.age_yr for p in cohort]
-    bmis = [p.bmi for p in cohort]
-    
-    print(f"\nCohort Summary:")
-    print(f"  Sex: {males} male ({100*males/len(cohort):.1f}%), {females} female ({100*females/len(cohort):.1f}%)")
-    print(f"  Age: {min(ages)}-{max(ages)} yr (mean {sum(ages)/len(ages):.1f})")
-    print(f"  BMI: {min(bmis):.1f}-{max(bmis):.1f} (mean {sum(bmis)/len(bmis):.1f})")
-    
-    if args.no_stabilize:
-        print(f"\nSkipping stabilization (--no-stabilize)")
-        print(f"Profiles saved to manifest. Run without --no-stabilize to create Pulse states.")
-        return
-    
-    # Stabilize patients in parallel
-    num_workers = args.workers or max(1, cpu_count() - 1)
-    print(f"\nStabilizing {len(cohort)} patients with {num_workers} workers...")
-    print(f"Estimated time: {len(cohort) * 2.5 / num_workers:.0f}-{len(cohort) * 3.5 / num_workers:.0f} minutes\n")
-    
-    # Prepare arguments for worker processes
-    work_items = [
-        (asdict(profile), output_dir, pulse_bin, pulse_python)
-        for profile in cohort
-    ]
-    
-    # Run stabilization
-    from multiprocessing import freeze_support
-    freeze_support()
-    
-    results = []
-    completed = 0
-    failed = 0
-    
-    with Pool(num_workers) as pool:
-        for result in pool.imap_unordered(stabilize_patient, work_items):
-            completed += 1
-            if result['status'] == 'success':
-                print(f"  [{completed}/{len(cohort)}] ✓ {result['name']}")
-            else:
-                failed += 1
-                print(f"  [{completed}/{len(cohort)}] ✗ {result['name']}: {result.get('message', 'Unknown error')}")
-            results.append(result)
-    
-    # Summary
-    print(f"\n{'='*60}")
-    print(f"  COMPLETE")
-    print(f"{'='*60}")
-    print(f"  Success: {completed - failed}/{len(cohort)}")
-    print(f"  Failed: {failed}")
-    print(f"  Output: {output_dir}")
-    print(f"{'='*60}\n")
-    
-    # Update manifest with stabilization results
-    manifest['stabilization'] = {
-        'completed_at': datetime.now().isoformat(),
-        'success': completed - failed,
-        'failed': failed,
-        'results': results
-    }
-    
-    with open(manifest_path, 'w') as f:
-        json.dump(manifest, f, indent=2)
-
-
-if __name__ == '__main__':
-    from multiprocessing import freeze_support
-    freeze_support()
-    main()

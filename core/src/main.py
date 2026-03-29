@@ -43,6 +43,9 @@ from controllers import HTTPController, HTTPFluidController, BuiltinController, 
 from cohort_builder import SoldierGenerator, stabilize_patient
 from database.experiment import Experiment
 
+from init_db import init_db
+init_db()  # Ensure DB is initialized
+
 # === PULSE IMPORTS ===
 from pulse.engine.PulseEngine import PulseEngine, eModelType
 from pulse.engine.PulseEnginePool import PulseEnginePool
@@ -77,12 +80,11 @@ from pulse.cdm.scalars import (
 from pulse.cdm.patient import eSex, SEPatient, SEPatientConfiguration
 from pulse.cdm.io.patient import serialize_patient_from_file
 
-# Use absolute paths so they work even after os.chdir()
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(SCRIPT_DIR, 'uploads')
-RESULTS_FOLDER = os.path.join(SCRIPT_DIR, 'results')
-Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
-Path(RESULTS_FOLDER).mkdir(exist_ok=True)
+# Use absolute paths from PROJECT_ROOT (works even after os.chdir())
+PATIENTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'patients')
+EXPERIMENT_RESULTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'experiment_results')
+Path(PATIENTS_FOLDER).mkdir(parents=True, exist_ok=True)
+Path(EXPERIMENT_RESULTS_FOLDER).mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -583,7 +585,7 @@ def run_single_patient(args):
         
         if is_custom:
             # Check if this is a pre-stabilized state file or a patient definition
-            is_state_file = any(key in patient_json for key in ['SimulationTime', 'InitialPatient', 'Compartments', 'CurrentPatient'])
+            is_state_file = patient_json and any(key in patient_json for key in ['SimulationTime', 'InitialPatient', 'Compartments', 'CurrentPatient'])
             
             if is_state_file:
                 # Pre-stabilized state file - load directly
@@ -601,6 +603,14 @@ def run_single_patient(args):
                         os.unlink(temp_path)
                     except:
                         pass
+            elif patient_json is None:
+                # Newly stabilized patient - look for state file in patients folder
+                state_file_path = os.path.join(PATIENTS_FOLDER, f"{patient_name}@0s.json")
+                if os.path.exists(state_file_path):
+                    if not pulse.serialize_from_file(state_file_path, data_mgr):
+                        raise RuntimeError(f"Failed to load stabilized patient state: {patient_name}")
+                else:
+                    raise RuntimeError(f"Stabilized patient state file not found: {state_file_path}")
             else:
                 # Patient definition - needs stabilization
                 pc = SEPatientConfiguration()
@@ -1791,7 +1801,7 @@ def run_batch_thread(batch_id, batch):
     
     # Prepare arguments for worker processes
     #TODO: edit output_dir to database output path when database integration is done
-    output_dir = os.path.join(RESULTS_FOLDER, f"batch_{batch_id}_output")
+    output_dir = PATIENTS_FOLDER
     work_items = [
         (asdict(profile), output_dir, PULSE_BIN, PULSE_PYTHON)
         for profile in generated_patients
@@ -1817,7 +1827,14 @@ def run_batch_thread(batch_id, batch):
             results.append(result)
 
     #add generated patients to cohort
-    patients += [r['name'] for r in results if r['status'] == 'success']
+    patients = []
+    for r in results:
+        if r['status'] == 'success':
+            patients.append({
+                'name': r['name'],
+                'json': r.get('json'),
+                'id': r.get('id')
+            })
 
     #generate experiment object
     #experiment = Experiment.from_json(batch, patients)
@@ -1890,19 +1907,20 @@ def run_batch_thread(batch_id, batch):
         batches[batch_id]['workers'] = workers
         """
         for p in patients:
-            job_id = p
+            patient_name = p['name'] if isinstance(p, dict) else p
+            job_id = patient_name
             batches[batch_id]['patients'][job_id] = {
                 'status': 'queued',
                 'sim_time': 0,
                 'duration': experiment.simulation_duration,
-                'is_custom': False,
-                'base_patient': p #TODO: probably dont need base patient and is custom
+                'is_custom': True,  # Newly generated patients are pre-stabilized (custom=state file)
+                'base_patient': patient_name
             }
     
     try:
         # Create output directory
         timestamp = experiment.experiment_id  # Use experiment ID as timestamp for better traceability
-        batch_dir = os.path.join(RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
+        batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
         os.makedirs(batch_dir, exist_ok=True)
         
         # Prepare batch config (without patients list)
@@ -1933,7 +1951,9 @@ def run_batch_thread(batch_id, batch):
         patient_args = []
         for p in patients:
             #TODO: add in replicates if needed
-            job_id = p
+            # p is now a dict with name, state_path, id
+            patient_name = p['name'] if isinstance(p, dict) else p
+            job_id = patient_name
             config = batch_config.copy() #TODO: use experiment object?
             patient_args.append((p, config, batch_dir, job_id))
         """
@@ -2049,7 +2069,7 @@ def run_batch_thread(batch_id, batch):
         # Create ZIP of all results (complete or partial from cancelled jobs)
         # Even if cancelled, include whatever we collected
         if csv_paths:
-            zip_path = os.path.join(RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}.zip")
+            zip_path = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}.zip")
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for job_id, csv_path in csv_paths.items():
                     zf.write(csv_path, os.path.basename(csv_path))
