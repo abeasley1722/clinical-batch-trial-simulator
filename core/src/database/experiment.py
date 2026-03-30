@@ -29,6 +29,7 @@ class Experiment:
     simulation_duration: int
     events: list[dict] #TODO: store as an object for better structure?
     output_columns: list[str] 
+    output_dir: str
     #metrics: list[str] TODO: figure out how to represent the metrics. using metrics.py object?
     #scenarios: list[str] TODO: figure out how to represent the scenarios. list of events is already stored
     #controller TODO: figure out how to represent the controller
@@ -39,7 +40,7 @@ class Experiment:
         pass
 
     @classmethod
-    def from_json(cls, json_data, patient_list: list[str]) -> 'Experiment':
+    def from_json(cls, json_data, patient_list: list[str], file_path: str) -> 'Experiment':
         """
         Creates an Experiment instance from JSON data
         and a list of patient files described by the JSON request.
@@ -50,7 +51,8 @@ class Experiment:
             patients = patient_list,
             simulation_duration = json_data.get("duration_s", 0),
             events = json_data.get("events", []), 
-            output_columns = json_data.get("output_columns", [])
+            output_columns = json_data.get("output_columns", []),
+            output_dir = file_path
             #TODO: add metrics, scenarios, controller, vitals
         )
         

@@ -41,11 +41,11 @@ sys.path.insert(0, PULSE_PYTHON)
 sys.path.insert(0, PULSE_BIN)
 os.add_dll_directory(PULSE_BIN)
 
-from vital_ranges import SOLDIER
+from vital_ranges import SOLDIER, ADULT, PEDIATRIC, GERIATRIC, Demographic
 
 @dataclass
-class SoldierProfile:
-    """A virtual soldier's baseline characteristics."""
+class PatientProfile:
+    """A virtual patient's baseline characteristics."""
     
     # Identity
     id : str
@@ -70,6 +70,7 @@ class SoldierProfile:
     # Metadata
     seed: int
     generated_at: str
+    demographic: Demographic
     
     def to_pulse_config(self) -> dict:
         """Convert to Pulse patient configuration format."""
@@ -85,12 +86,11 @@ class SoldierProfile:
             "RespirationRateBaseline": {"ScalarFrequency": {"Value": self.respiration_rate_baseline, "Unit": "1/min"}},
         }
 
-#TODO: extend to accept other demographic groups
-class SoldierGenerator:
+class PatientGenerator:
     """
-    Generates physiologically plausible soldier profiles.
-    
-    Based on typical military demographics and fitness standards.
+    Generates physiologically plausible patient profiles.
+
+    Based on typical demographic distributions and clinical standards.
     """
     
     def __init__(self, seed: Optional[int] = None):
@@ -114,30 +114,33 @@ class SoldierGenerator:
         """Calculate body surface area using Mosteller formula."""
         return ((height_cm * weight_kg) / 3600) ** 0.5
     
-    def generate_one(self) -> SoldierProfile:
-        """Generate a single soldier profile."""
+    def generate_one(self, demo: Demographic) -> PatientProfile:
+        """Generate a single patient profile."""
         self.count += 1
         
-        # Deterministic seed for this soldier (reproducible)
-        soldier_seed = self.base_seed + self.count
-        self.rng.seed(soldier_seed)
+        # Deterministic seed for this patient (reproducible)
+        patient_seed = self.base_seed + self.count
+        self.rng.seed(patient_seed)
         
         # Sex
-        is_female = self.rng.random() < SOLDIER.female_proportion
+        is_female = self.rng.random() < demo.female_proportion
         sex = "Female" if is_female else "Male"
         
         # Age (truncated normal)
-        age = int(self._normal(SOLDIER.age_mean, SOLDIER.age_std, SOLDIER.age_min, SOLDIER.age_max))
+        age = int(self._normal(demo.age_mean, demo.age_std, demo.age_min, demo.age_max))
         
         # Height based on sex
         if is_female:
-            height = self._normal(SOLDIER.female_height_mean, SOLDIER.female_height_std)
+            height = self._normal(demo.female_height_mean, demo.female_height_std)
         else:
-            height = self._normal(SOLDIER.male_height_mean, SOLDIER.male_height_std)
+            height = self._normal(demo.male_height_mean, demo.male_height_std)
         height = round(height, 1)
         
         # BMI -> Weight
-        bmi = self._normal(SOLDIER.bmi_mean, SOLDIER.bmi_std, SOLDIER.bmi_min, SOLDIER.bmi_max)
+        if is_female:
+            bmi = self._normal(demo.female_bmi_mean, demo.female_bmi_std, demo.bmi_min, demo.bmi_max)
+        else:
+            bmi = self._normal(demo.male_bmi_mean, demo.male_bmi_std, demo.bmi_min, demo.bmi_max)
         weight = bmi * (height / 100) ** 2
         weight = round(weight, 1)
         bmi = round(bmi, 1)
@@ -147,24 +150,31 @@ class SoldierGenerator:
         
         # Heart rate (sex-dependent)
         if is_female:
-            hr = int(self._normal(SOLDIER.female_hr_mean, SOLDIER.female_hr_std, SOLDIER.hr_min, SOLDIER.hr_max))
+            hr = int(self._normal(demo.female_hr_mean, demo.female_hr_std, demo.hr_min, demo.hr_max))
         else:
-            hr = int(self._normal(SOLDIER.male_hr_mean, SOLDIER.male_hr_std, SOLDIER.hr_min, SOLDIER.hr_max))
+            hr = int(self._normal(demo.male_hr_mean, demo.male_hr_std, demo.hr_min, demo.hr_max))
         
         # Blood pressure (correlated - higher SBP tends to have higher DBP)
-        sbp = int(self._normal(SOLDIER.sbp_mean, SOLDIER.sbp_std, SOLDIER.sbp_min, SOLDIER.sbp_max))
+        if is_female:
+            sbp = int(self._normal(demo.female_sbp_mean, demo.female_sbp_std, demo.sbp_min, demo.sbp_max))
+        else:
+            sbp = int(self._normal(demo.male_sbp_mean, demo.male_sbp_std, demo.sbp_min, demo.sbp_max))
         # DBP correlates with SBP
-        dbp_offset = (sbp - SOLDIER.sbp_mean) * 0.5  # Partial correlation
-        dbp = int(self._normal(SOLDIER.dbp_mean + dbp_offset, SOLDIER.dbp_std * 0.7, SOLDIER.dbp_min, SOLDIER.dbp_max))
+        if is_female:
+            dbp_offset = (sbp - demo.female_sbp_mean) * 0.5  # Partial correlation
+            dbp = int(self._normal(demo.female_dbp_mean + dbp_offset, demo.female_dbp_std * 0.7, demo.dbp_min, demo.dbp_max))
+        else:
+            dbp_offset = (sbp - demo.male_sbp_mean) * 0.5  # Partial correlation
+            dbp = int(self._normal(demo.male_dbp_mean + dbp_offset, demo.male_dbp_std * 0.7, demo.dbp_min, demo.dbp_max))
         
         # Respiration rate
-        rr = int(self._normal(SOLDIER.rr_mean, SOLDIER.rr_std, SOLDIER.rr_min, SOLDIER.rr_max))
+        rr = int(self._normal(demo.rr_mean, demo.rr_std, demo.rr_min, demo.rr_max))
         
         # Generate name (Soldier_XXX where XXX is hash-based for reproducibility)
-        name_hash = hashlib.md5(f"{soldier_seed}".encode()).hexdigest()[:8].upper()
-        name = f"Soldier_{name_hash}"
+        name_hash = hashlib.md5(f"{patient_seed}".encode()).hexdigest()[:8].upper()
+        name = f"{demo.demo_name}_{name_hash}"
         
-        return SoldierProfile(
+        return PatientProfile(
             id = name_hash,
             name=name,
             sex=sex,
@@ -177,13 +187,14 @@ class SoldierGenerator:
             systolic_bp_baseline=sbp,
             diastolic_bp_baseline=dbp,
             respiration_rate_baseline=rr,
-            seed=soldier_seed,
-            generated_at=datetime.now().isoformat()
+            seed=patient_seed,
+            generated_at=datetime.now().isoformat(),
+            demographic=demo
         )
     
-    def generate_cohort(self, n: int) -> List[SoldierProfile]:
-        """Generate n soldier profiles."""
-        return [self.generate_one() for _ in range(n)]
+    def generate_cohort(self, n: int, d: Demographic) -> List[PatientProfile]:
+        """Generate n patient profiles."""
+        return [self.generate_one(demo = d) for _ in range(n)]
 
 
 def stabilize_patient(args) -> dict:
@@ -193,9 +204,16 @@ def stabilize_patient(args) -> dict:
     This runs in a separate process, so must set up Pulse independently.
     Returns dict with status and path to stabilized state.
     """
-    #TODO: change from taking args, need to change output dir to the proper location in the database
-    profile_dict, output_dir, pulse_bin, pulse_python = args
-    profile = SoldierProfile(**profile_dict)
+    profile_dict, output_dir, pulse_bin, pulse_python, demo_name = args
+    demographic_map = {
+        'soldier': SOLDIER,
+        'adult': ADULT,
+        'pediatric': PEDIATRIC,
+        'geriatric': GERIATRIC
+    }
+    profile_dict.pop('demographic', None)
+    profile_dict['demographic'] = demographic_map.get(demo_name, SOLDIER)
+    profile = PatientProfile(**profile_dict)
     
     try:
         # Set up Pulse paths for this worker
@@ -249,6 +267,7 @@ def stabilize_patient(args) -> dict:
         data_mgr = SEDataRequestManager(data_requests)
         
         # Initialize (stabilize) - this takes ~2-3 minutes
+        #TODO: if stabilization failed, try regenerating patient?
         if not pulse.initialize_engine(pc, data_mgr):
             return {
                 'status': 'error',
@@ -257,7 +276,6 @@ def stabilize_patient(args) -> dict:
             }
         
         # Save stabilized state
-        #TODO: save to proper location in database
         output_path = os.path.join(output_dir, f"{profile.name}@0s.json")
         
         # Pulse saves state relative to its working directory
@@ -272,6 +290,7 @@ def stabilize_patient(args) -> dict:
                 'message': 'Failed to save state'
             }
         
+        # Save to database
         insert_patient(
             cohort_id=None,
             sex=profile.sex,
@@ -279,7 +298,7 @@ def stabilize_patient(args) -> dict:
             height=profile.height_cm,
             weight=profile.weight_kg,
             json_file=rel_output,
-            additional_descriptors=None,
+            additional_descriptors={ "demographic": profile.demographic.demo_name },
             patient_id=profile.id
         )
 
@@ -287,7 +306,7 @@ def stabilize_patient(args) -> dict:
             'status': 'success',
             'name': profile.name,
             'id': profile.id,
-            'state_path': rel_output  # Path to stabilized state file
+            'json': rel_output
         }
         
     except Exception as e:

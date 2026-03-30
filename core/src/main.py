@@ -40,8 +40,9 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
 from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
-from cohort_builder import SoldierGenerator, stabilize_patient
+from cohort_builder import PatientGenerator, stabilize_patient
 from database.experiment import Experiment
+from vital_ranges import SOLDIER, GERIATRIC, ADULT, PEDIATRIC, Demographic
 
 from init_db import init_db
 init_db()  # Ensure DB is initialized
@@ -1778,19 +1779,34 @@ def run_batch_thread(batch_id, batch):
             'zip_path': None,
         }
 
-    patient_count = batch.get('patient_count', 0) #TODO: verify json body field name 
+    # extract demographic info from batch config
+    demographics = batch.get('demographics', [])
+    demographic_map = {
+        'soldier': SOLDIER,
+        'adult': ADULT,
+        'geriatric': GERIATRIC,
+        'pediatric': PEDIATRIC
+    }
     patients = []
     #TODO: draw patients from database
     """
-    patients += draw_patients_from_database(criteria, count=patient_count)
-    patient_count -= len(patients) 
-    #TODO: patient count needs to be more sophisticated than just a count, need to take demographic criteria into account
-    #maybe criteria can be a dict of demographic criteria and counts
+    for demo_spec in demographics:
+        demo_obj = demographic_map.get(demo_spec['name'])
+        patients += draw_patients_from_database(count=demo_spec['count'], demo_obj)
+        demo_spec['count'] -= len(patients)
     """
 
     #generate patients if not enough patients in database match criteria
-    generator = SoldierGenerator(random.seed()) #TODO: expand to take demographic criteria from batch config, better random seed?
-    generated_patients = generator.generate_cohort(patient_count)
+    generator = PatientGenerator(random.seed())
+    generated_patients = []
+    for demo_spec in demographics:
+        demo_name = demo_spec.get('name')
+        count = demo_spec.get('count', 0)
+        demo_obj = demographic_map.get(demo_name)
+        if demo_obj and count > 0:
+            generated_patients += generator.generate_cohort(count, demo_obj)
+        elif not demo_obj:
+            print(f"[Batch] Warning: Unknown demographic '{demo_name}' - skipping generation for this group")
 
     # Stabilize patients in parallel
     num_workers = batch.get('workers', None)
@@ -1800,10 +1816,9 @@ def run_batch_thread(batch_id, batch):
     print(f"Estimated time: {len(generated_patients) * 2.5 / num_workers:.0f}-{len(generated_patients) * 3.5 / num_workers:.0f} minutes\n")
     
     # Prepare arguments for worker processes
-    #TODO: edit output_dir to database output path when database integration is done
     output_dir = PATIENTS_FOLDER
     work_items = [
-        (asdict(profile), output_dir, PULSE_BIN, PULSE_PYTHON)
+        (asdict(profile), output_dir, PULSE_BIN, PULSE_PYTHON, profile.demographic.demo_name)
         for profile in generated_patients
     ]
     
@@ -1815,7 +1830,6 @@ def run_batch_thread(batch_id, batch):
     completed = 0
     failed = 0
     
-    #TODO: verify stabilize_patient is working as intended and saves data to database properly
     with ProcessPool(num_workers) as pool:
         for result in pool.imap_unordered(stabilize_patient, work_items):
             completed += 1
@@ -1837,15 +1851,20 @@ def run_batch_thread(batch_id, batch):
             })
 
     #generate experiment object
-    #experiment = Experiment.from_json(batch, patients)
-    experiment = Experiment(
-        name='Test Experiment',
-        experiment_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
-        patients=patients,
-        simulation_duration=300,
-        events=[],
-        output_columns=[]
-    ) #TODO: remove once we can test with JSON or from frontend input
+    # Create output directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
+    os.makedirs(batch_dir, exist_ok=True)
+    experiment = Experiment.from_json(batch, patients, batch_dir)
+    # experiment = Experiment(
+    #     name='Test Experiment',
+    #     experiment_id=timestamp,
+    #     patients=patients,
+    #     simulation_duration=300,
+    #     events=[],
+    #     output_columns=[],
+    #     output_dir=batch_dir,
+    # ) #TODO: remove once we can test with JSON or from frontend input
 
     #TODO: remove when Experiment object integration is done
     """
@@ -1918,11 +1937,6 @@ def run_batch_thread(batch_id, batch):
             }
     
     try:
-        # Create output directory
-        timestamp = experiment.experiment_id  # Use experiment ID as timestamp for better traceability
-        batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
-        os.makedirs(batch_dir, exist_ok=True)
-        
         # Prepare batch config (without patients list)
         # Include PULSE_BIN and PULSE_PYTHON so worker processes know where to chdir and import from
         # v6: start_intubated defaults to False - use events for intubation/ventilation
@@ -1947,10 +1961,8 @@ def run_batch_thread(batch_id, batch):
         # Custom: pass dict with {name, json}
         # Include replicate info for file naming
         # Cancellation is checked via file-based flag, not passed in args
-        #TODO: use experiment object?
         patient_args = []
         for p in patients:
-            #TODO: add in replicates if needed
             # p is now a dict with name, state_path, id
             patient_name = p['name'] if isinstance(p, dict) else p
             job_id = patient_name
@@ -2066,6 +2078,7 @@ def run_batch_thread(batch_id, batch):
             del batch_cancel_flags[batch_id]
         clear_batch_cancel_flag(batch_id)
 
+        #TODO: Replace and/or save to database
         # Create ZIP of all results (complete or partial from cancelled jobs)
         # Even if cancelled, include whatever we collected
         if csv_paths:
@@ -2121,7 +2134,11 @@ if __name__ == '__main__':
 
     print("Running test of batch simulation")
     run_batch_thread("test_batch", {
-        'patient_count': 5,
+        'name': 'Test Batch',
+        'demographics': [
+        {'name': 'soldier', 'count': 2},
+        {'name': 'adult', 'count': 3}
+        ],
         'duration_s': 60,
         'sample_rate_hz': 50,
         'start_intubated': False,
