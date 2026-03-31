@@ -41,7 +41,7 @@ sys.path.insert(0, PULSE_PYTHON)
 sys.path.insert(0, PULSE_BIN)
 os.add_dll_directory(PULSE_BIN)
 
-from vital_ranges import SOLDIER, ADULT, PEDIATRIC, GERIATRIC, Demographic
+from vital_ranges import SOLDIER, ADULT, Demographic
 
 @dataclass
 class PatientProfile:
@@ -103,11 +103,10 @@ class PatientGenerator:
         """Clamp value to range."""
         return max(min_val, min(max_val, value))
     
-    def _normal(self, mean: float, std: float, min_val: float = 0, max_val: float = 0) -> float:
+    def _normal(self, mean: float, std: float, min_val: Optional[float] = None, max_val: Optional[float] = None) -> float:
         """Sample from normal distribution, optionally clamped."""
         value = self.rng.gauss(mean, std)
-        if min_val != 0 or max_val != 0:
-            value = self._clamp(value, min_val or float('-inf'), max_val or float('inf'))
+        value = self._clamp(value, min_val if min_val is not None else float('-inf'), max_val if max_val is not None else float('inf'))
         return value
     
     def _calculate_bsa(self, height_cm: float, weight_kg: float) -> float:
@@ -144,6 +143,7 @@ class PatientGenerator:
         weight = bmi * (height / 100) ** 2
         weight = round(weight, 1)
         bmi = round(bmi, 1)
+        bmi = self._clamp(bmi, demo.bmi_min, demo.bmi_max)
         
         # Body surface area
         bsa = round(self._calculate_bsa(height, weight), 2)
@@ -159,6 +159,7 @@ class PatientGenerator:
             sbp = int(self._normal(demo.female_sbp_mean, demo.female_sbp_std, demo.sbp_min, demo.sbp_max))
         else:
             sbp = int(self._normal(demo.male_sbp_mean, demo.male_sbp_std, demo.sbp_min, demo.sbp_max))
+
         # DBP correlates with SBP
         if is_female:
             dbp_offset = (sbp - demo.female_sbp_mean) * 0.5  # Partial correlation
@@ -207,9 +208,7 @@ def stabilize_patient(args) -> dict:
     profile_dict, output_dir, pulse_bin, pulse_python, demo_name = args
     demographic_map = {
         'soldier': SOLDIER,
-        'adult': ADULT,
-        'pediatric': PEDIATRIC,
-        'geriatric': GERIATRIC
+        'adult': ADULT
     }
     profile_dict.pop('demographic', None)
     profile_dict['demographic'] = demographic_map.get(demo_name, SOLDIER)

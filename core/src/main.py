@@ -42,7 +42,7 @@ from flask_socketio import SocketIO, emit
 from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
 from cohort_builder import PatientGenerator, stabilize_patient
 from database.experiment import Experiment
-from vital_ranges import SOLDIER, GERIATRIC, ADULT, PEDIATRIC, Demographic
+from vital_ranges import SOLDIER, ADULT, Demographic
 
 from init_db import init_db
 init_db()  # Ensure DB is initialized
@@ -1783,9 +1783,7 @@ def run_batch_thread(batch_id, batch):
     demographics = batch.get('demographics', [])
     demographic_map = {
         'soldier': SOLDIER,
-        'adult': ADULT,
-        'geriatric': GERIATRIC,
-        'pediatric': PEDIATRIC
+        'adult': ADULT
     }
     patients = []
     #TODO: draw patients from database
@@ -1846,7 +1844,7 @@ def run_batch_thread(batch_id, batch):
         if r['status'] == 'success':
             patients.append({
                 'name': r['name'],
-                'json': r.get('json'),
+                'json': None,  # Stable state is on disk under PATIENTS_FOLDER (e.g. name@0s.json)
                 'id': r.get('id')
             })
 
@@ -1856,15 +1854,6 @@ def run_batch_thread(batch_id, batch):
     batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
     os.makedirs(batch_dir, exist_ok=True)
     experiment = Experiment.from_json(batch, patients, batch_dir)
-    # experiment = Experiment(
-    #     name='Test Experiment',
-    #     experiment_id=timestamp,
-    #     patients=patients,
-    #     simulation_duration=300,
-    #     events=[],
-    #     output_columns=[],
-    #     output_dir=batch_dir,
-    # ) #TODO: remove once we can test with JSON or from frontend input
 
     #TODO: remove when Experiment object integration is done
     """
@@ -2136,10 +2125,10 @@ if __name__ == '__main__':
     run_batch_thread("test_batch", {
         'name': 'Test Batch',
         'demographics': [
-        {'name': 'soldier', 'count': 2},
-        {'name': 'adult', 'count': 3}
+        {'name': 'soldier', 'count': 4},
+        {'name': 'adult', 'count': 20}
         ],
-        'duration_s': 60,
+        'duration_s': 300,
         'sample_rate_hz': 50,
         'start_intubated': False,
         'vent_settings': {},
