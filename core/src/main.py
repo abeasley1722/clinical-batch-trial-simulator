@@ -20,6 +20,7 @@ import csv
 import tempfile
 import zipfile
 import argparse
+import uuid
 import requests as http_requests
 from datetime import datetime
 from pathlib import Path
@@ -41,10 +42,16 @@ from flask_socketio import SocketIO, emit
 
 from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
 from cohort_builder import PatientGenerator, stabilize_patient
-from database.experiment import Experiment
 from vital_ranges import SOLDIER, ADULT, Demographic
 
+from data_classes import Experiment, Patient, Scenario
+
 from init_db import init_db
+from database.patient import get_patients_by_demographic
+from database.batch import insert_batch
+from database.metric import insert_metric, insert_run
+from database.experiment import insert_experiment_from_object
+
 init_db()  # Ensure DB is initialized
 
 # === PULSE IMPORTS ===
@@ -1717,6 +1724,12 @@ def run_single_patient(args):
 
         pulse.clear()
 
+        #strip patient id from patient name
+        patient_id = patient_name.split('_', 1)[1]
+
+        #save to database
+        insert_batch(experiment_id=batch_config['experiment_id'], patient_id=patient_id, raw_csv_path=csv_path)
+
         # Return cancelled status if we were cancelled
         if was_cancelled:
             return {
@@ -1786,13 +1799,14 @@ def run_batch_thread(batch_id, batch):
         'adult': ADULT
     }
     patients = []
-    #TODO: draw patients from database
-    """
+
+    #draw patients from database
     for demo_spec in demographics:
         demo_obj = demographic_map.get(demo_spec['name'])
-        patients += draw_patients_from_database(count=demo_spec['count'], demo_obj)
-        demo_spec['count'] -= len(patients)
-    """
+        patients_drawn = len(patients)
+        patients += get_patients_by_demographic(demo_obj, demo_spec.get('count', 0))
+        patients_drawn = len(patients) - patients_drawn
+        demo_spec['count'] -= patients_drawn
 
     #generate patients if not enough patients in database match criteria
     generator = PatientGenerator(random.seed())
@@ -1850,23 +1864,10 @@ def run_batch_thread(batch_id, batch):
 
     #generate experiment object
     # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}")
+    batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}")
     os.makedirs(batch_dir, exist_ok=True)
-    experiment = Experiment.from_json(batch, patients, batch_dir)
+    experiment = Experiment.from_json(batch, patients, batch_dir, batch_id)
 
-    #TODO: remove when Experiment object integration is done
-    """
-    pre_stabilized = batch.get('patients', [])
-    custom_patients = batch.get('custom_patients', [])  # List of {name, json}
-    duration_s = batch.get('duration_s', 300)
-    workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
-    replicates = max(1, batch.get('replicates', 1))
-
-    base_patient_count = len(pre_stabilized) + len(custom_patients)
-    total_jobs = base_patient_count * replicates
-    print(f"[BATCH] {batch_id}: {base_patient_count} patients x {replicates} replicates = {total_jobs} jobs")
-    """
     workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
     total_jobs = len(patients)
     
@@ -1887,33 +1888,6 @@ def run_batch_thread(batch_id, batch):
         batches[batch_id]['patient_count'] = len(patients)
         batches[batch_id]['total_jobs'] = len(patients)
 
-        """
-        # Pre-stabilized patients x replicates
-        for p in pre_stabilized:
-            for rep in range(1, replicates + 1):
-                job_id = f"{p}_r{rep}" if replicates > 1 else p
-                batches[batch_id]['patients'][job_id] = {
-                    'status': 'queued',
-                    'sim_time': 0,
-                    'duration': duration_s,
-                    'is_custom': False,
-                    'replicate': rep,
-                    'base_patient': p
-                }
-        # Custom patients x replicates
-        for cp in custom_patients:
-            for rep in range(1, replicates + 1):
-                job_id = f"custom_{cp['name']}_r{rep}" if replicates > 1 else f"custom_{cp['name']}"
-                batches[batch_id]['patients'][job_id] = {
-                    'status': 'queued',
-                    'sim_time': 0,
-                    'duration': duration_s,
-                    'is_custom': True,
-                    'replicate': rep,
-                    'base_patient': cp['name']
-                }
-        batches[batch_id]['workers'] = workers
-        """
         for p in patients:
             patient_name = p['name'] if isinstance(p, dict) else p
             job_id = patient_name
@@ -1940,6 +1914,7 @@ def run_batch_thread(batch_id, batch):
             'pulse_python': PULSE_PYTHON,
             'output_columns': experiment.output_columns,
             'available_variables': AVAILABLE_VARIABLES,
+            'experiment_id': experiment.experiment_id,
         }
 
         # Clear any stale cancel flag for this batch (file-based)
@@ -1955,24 +1930,8 @@ def run_batch_thread(batch_id, batch):
             # p is now a dict with name, state_path, id
             patient_name = p['name'] if isinstance(p, dict) else p
             job_id = patient_name
-            config = batch_config.copy() #TODO: use experiment object?
+            config = batch_config.copy()
             patient_args.append((p, config, batch_dir, job_id))
-        """
-        for p in pre_stabilized:
-            for rep in range(1, replicates + 1):
-                job_id = f"{p}_r{rep}" if replicates > 1 else p
-                config_with_rep = batch_config.copy()
-                config_with_rep['replicate'] = rep
-                config_with_rep['replicate_suffix'] = f"_r{rep}" if replicates > 1 else ""
-                patient_args.append((p, config_with_rep, batch_dir, job_id))
-        for cp in custom_patients:
-            for rep in range(1, replicates + 1):
-                job_id = f"custom_{cp['name']}_r{rep}" if replicates > 1 else f"custom_{cp['name']}"
-                config_with_rep = batch_config.copy()
-                config_with_rep['replicate'] = rep
-                config_with_rep['replicate_suffix'] = f"_r{rep}" if replicates > 1 else ""
-                patient_args.append((cp, config_with_rep, batch_dir, job_id))
-        """
 
         # Run with ProcessPool using apply_async for non-blocking cancellation support
         print(f"Starting batch {batch_id} with {workers} workers for {total_jobs} jobs")
@@ -1984,7 +1943,6 @@ def run_batch_thread(batch_id, batch):
         with ProcessPool(processes=workers) as pool:
             # Submit all jobs asynchronously
             async_results = []
-            #TODO: use experiment object?
             for args in patient_args:
                 async_results.append(pool.apply_async(run_single_patient, (args,)))
 
@@ -2067,32 +2025,11 @@ def run_batch_thread(batch_id, batch):
             del batch_cancel_flags[batch_id]
         clear_batch_cancel_flag(batch_id)
 
-        #TODO: Replace and/or save to database
-        # Create ZIP of all results (complete or partial from cancelled jobs)
-        # Even if cancelled, include whatever we collected
-        if csv_paths:
-            zip_path = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}_{timestamp}.zip")
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for job_id, csv_path in csv_paths.items():
-                    zf.write(csv_path, os.path.basename(csv_path))
+        #TODO: do analysis
+        
+        #insert experiement into database
+        insert_experiment_from_object(experiment)
 
-            with batch_lock:
-                batches[batch_id]['status'] = 'cancelled' if cancelled else 'complete'
-                batches[batch_id]['zip_path'] = zip_path
-                batches[batch_id]['batch_dir'] = batch_dir
-                batches[batch_id]['completed_count'] = len(csv_paths)
-                batches[batch_id]['total_count'] = total_jobs
-
-            status_msg = "cancelled" if cancelled else "complete"
-            print(f"Batch {batch_id} {status_msg}: {len(csv_paths)}/{total_jobs} jobs have results")
-        else:
-            # No results at all (very early cancellation or all jobs failed)
-            with batch_lock:
-                batches[batch_id]['status'] = 'cancelled' if cancelled else 'failed'
-                batches[batch_id]['completed_count'] = 0
-                batches[batch_id]['total_count'] = total_jobs
-            print(f"Batch {batch_id} {'cancelled' if cancelled else 'failed'}: no results collected")
-    
     except Exception as e:
         import traceback
         with batch_lock:
@@ -2122,7 +2059,11 @@ if __name__ == '__main__':
     print("="*60 + "\n")
 
     print("Running test of batch simulation")
-    run_batch_thread("test_batch", {
+    #batch id should be in the form of timestamp_uuid for uniqueness and traceability
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    id = str(uuid.uuid4())[:8]
+    batch_id = f"{timestamp}_{id}"
+    run_batch_thread(batch_id, { #TODO: add target metric and target value, etc
         'name': 'Test Batch',
         'demographics': [
         {'name': 'soldier', 'count': 4},

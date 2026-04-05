@@ -61,13 +61,6 @@ def add_no_cache_headers(response):
     response.headers['Pragma'] = 'no-cache'
     return response
 
-@app.after_request
-def add_no_cache_headers(response):
-    """Prevent browser caching during development."""
-    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    response.headers['Pragma'] = 'no-cache'
-    return response
-
 @app.route('/')
 def serve_gui():
     """Serve the GUI HTML file."""

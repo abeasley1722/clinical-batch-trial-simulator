@@ -291,14 +291,14 @@ def stabilize_patient(args) -> dict:
         
         # Save to database
         insert_patient(
-            cohort_id=None,
             sex=profile.sex,
             age=profile.age_yr,
             height=profile.height_cm,
             weight=profile.weight_kg,
             json_file=rel_output,
-            additional_descriptors={ "demographic": profile.demographic.demo_name },
-            patient_id=profile.id
+            additional_descriptors={},
+            patient_id=profile.id,
+            demographic_group=profile.demographic.demo_name
         )
 
         return {

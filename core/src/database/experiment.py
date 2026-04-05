@@ -1,58 +1,84 @@
-""" 
+"""
 ============================================================
-Author:         Zachary Kao
-Date Created:   2026-03-12
-Description:    Defines the Experiment object that represents a simulation request and its metadata
-                including:
-                - patient/patients
-                - simulation duration
-                - scenario/scenarios information
-                - metrics needed
-                - controller
-                - events
-                - vitals altered by the controller
-============================================================ 
+Author:        Jared Garcia
+Date Created:  2026-03-22
+Description:   Database write and read operations for experiments.
+               Kept separate from experiment.py (which holds the
+               Experiment dataclass from branch 72) to avoid
+               merge conflicts.
+
+Usage:
+    from database.experiment_db import insert_experiment, get_experiment
+
+    insert_experiment(
+        experiment_id=exp.experiment_id,
+        name=exp.name,
+        simulation_duration=exp.simulation_duration,
+        events=exp.events,
+        output_columns=exp.output_columns
+    )
+
+Merge note (branch 72):
+    from_json() uses datetime.now() which should be
+    datetime.datetime.now() — this will crash at runtime
+    until fixed in branch 72.
+============================================================
 """
 
-from datetime import datetime
+import json
+from database.connection import transaction, execute, execute_one
+from data_classes import Experiment
 
-from . import patient
-from . import scenario
-from . import metric
-from dataclasses import dataclass
+def insert_experiment(experiment_id, name, target_metric=None,
+                      custom_target_value=None, simulation_duration=None,
+                      events=None, output_columns=None, status='pending'):
+    """
+    Insert an experiment record. Returns the experiment_id.
+    events and output_columns should be lists — stored as JSON.
+    """
+    events_json = json.dumps(events) if events else None
+    output_columns_json = json.dumps(output_columns) if output_columns else None
 
-@dataclass
-class Experiment:
-    name: str
-    experiment_id: str
-    patients: list[str] #TODO: store patient as patient objects
-    simulation_duration: int
-    events: list[dict] #TODO: store as an object for better structure?
-    output_columns: list[str] 
-    output_dir: str
-    #metrics: list[str] TODO: figure out how to represent the metrics. using metrics.py object?
-    #scenarios: list[str] TODO: figure out how to represent the scenarios. list of events is already stored
-    #controller TODO: figure out how to represent the controller
-    #vitals TODO: figure out how to represent the vitals altered by the controller
+    with transaction() as conn:
+        conn.execute("""
+            INSERT INTO experiments
+                (experiment_id, name, target_metric, custom_target_value,
+                 simulation_duration, events, output_columns, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (experiment_id, name, target_metric, custom_target_value,
+              simulation_duration, events_json, output_columns_json, status))
 
-    def __post_init__(self):
-        #TODO: add validation for fields
-        pass
+    return experiment_id
 
-    @classmethod
-    def from_json(cls, json_data, patient_list: list[str], file_path: str) -> 'Experiment':
-        """
-        Creates an Experiment instance from JSON data
-        and a list of patient files described by the JSON request.
-        """
-        return cls(
-            name = json_data.get("name"),
-            experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S"),
-            patients = patient_list,
-            simulation_duration = json_data.get("duration_s", 0),
-            events = json_data.get("events", []), 
-            output_columns = json_data.get("output_columns", []),
-            output_dir = file_path
-            #TODO: add metrics, scenarios, controller, vitals
-        )
-        
+def insert_experiment_from_object(experiment: Experiment):
+    """Helper to insert an Experiment dataclass instance."""
+    return insert_experiment(
+        experiment_id=experiment.experiment_id,
+        name=experiment.name,
+        simulation_duration=experiment.simulation_duration,
+        events=experiment.events,
+        output_columns=experiment.output_columns
+    )
+
+def get_experiment(experiment_id):
+    """Fetch one experiment by ID. Returns a dict or None."""
+    row = execute_one(
+        "SELECT * FROM experiments WHERE experiment_id = ?", (experiment_id,)
+    )
+    if row:
+        if row.get("events"):
+            row["events"] = json.loads(row["events"])
+        if row.get("output_columns"):
+            row["output_columns"] = json.loads(row["output_columns"])
+    return row
+
+
+def get_all_experiments():
+    """Fetch all experiments. Returns a list of dicts."""
+    rows = execute("SELECT * FROM experiments ORDER BY created_at DESC")
+    for row in rows:
+        if row.get("events"):
+            row["events"] = json.loads(row["events"])
+        if row.get("output_columns"):
+            row["output_columns"] = json.loads(row["output_columns"])
+    return rows
