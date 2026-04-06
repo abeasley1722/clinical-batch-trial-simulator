@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     simulation_duration INTEGER,
     events              TEXT,           -- JSON blob
     output_columns      TEXT,           -- JSON blob
+    output_dir          TEXT,
     status              TEXT NOT NULL DEFAULT 'pending',
     created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -43,9 +44,6 @@ CREATE TABLE IF NOT EXISTS cohorts (
 """
 
 # Patient_Cohorts — links patients to cohorts (many-to-many)
-# NOTE (branch 72 — cohort_builder.py):
-#   After inserting a patient, call add_patient_to_cohort(patient_id, cohort_id)
-#   to link them. cohort_id should come from insert_cohort() first.
 CREATE_PATIENT_COHORTS = """
 CREATE TABLE IF NOT EXISTS patient_cohorts (
     patient_id  TEXT NOT NULL,
@@ -65,6 +63,7 @@ CREATE TABLE IF NOT EXISTS patients (
     height                  REAL,
     weight                  REAL,
     json_file               TEXT,
+    demographic_group       TEXT,
     additional_descriptors  TEXT    -- JSON blob
 );
 """
@@ -100,13 +99,15 @@ CREATE TABLE IF NOT EXISTS runs (
 # Metrics — postprocessed results per run
 CREATE_METRICS = """
 CREATE TABLE IF NOT EXISTS metrics (
-    metric_id               TEXT PRIMARY KEY,
-    experiment_id           TEXT NOT NULL,
-    run_id                  TEXT,
-    mae                     REAL,
-    median                  REAL,
-    std_dev                 REAL,
-    time_within_target_range REAL,
+    metric_id                       TEXT PRIMARY KEY,
+    experiment_id                   TEXT NOT NULL,
+    run_id                          TEXT,
+    mean_absolute_error             REAL,
+    controller_start_time           REAL,
+    mean                            REAL,
+    std_dev                         REAL,
+    time_within_target_range        REAL,
+    percent_time_within_target_range REAL,
     FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id),
     FOREIGN KEY (run_id)        REFERENCES runs(run_id)
 );

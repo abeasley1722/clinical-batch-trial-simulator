@@ -11,19 +11,12 @@ import uuid
 from database.connection import transaction, execute, execute_one
 
 
-def insert_patient(sex=None, age=None, height=None,
-                   weight=None, json_file=None, additional_descriptors=None,
-                   patient_id=None):
+def insert_patient(sex=None, age=None, height=None, weight=None,
+                   json_file=None, demographic_group=None,
+                   additional_descriptors=None, patient_id=None):
     """
     Insert a patient record. Returns the patient_id.
     Pass patient_id if you already have one, otherwise a UUID is generated.
-
-    NOTE (branch 72 — cohort_builder.py):
-        cohort_id has been removed from this function. Cohort membership
-        is now managed via the patient_cohorts junction table.
-        After inserting a patient, call:
-            from database.cohort import add_patient_to_cohort
-            add_patient_to_cohort(patient_id, cohort_id)
     """
     pid = patient_id or str(uuid.uuid4())
     descriptors = json.dumps(additional_descriptors) if additional_descriptors else None
@@ -31,9 +24,11 @@ def insert_patient(sex=None, age=None, height=None,
     with transaction() as conn:
         conn.execute("""
             INSERT INTO patients
-                (patient_id, sex, age, height, weight, json_file, additional_descriptors)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (pid, sex, age, height, weight, json_file, descriptors))
+                (patient_id, sex, age, height, weight, json_file,
+                 demographic_group, additional_descriptors)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pid, sex, age, height, weight, json_file,
+              demographic_group, descriptors))
 
     return pid
 
@@ -46,67 +41,40 @@ def get_patient(patient_id):
     return row
 
 
-def get_patients_by_cohort(cohort_id):
-    """Fetch all patients in a cohort via the junction table. Returns a list of dicts."""
-    rows = execute("""
-        SELECT p.* FROM patients p
-        JOIN patient_cohorts pc ON p.patient_id = pc.patient_id
-        WHERE pc.cohort_id = ?
-    """, (cohort_id,))
+def get_all_patients(randomize=False):
+    """
+    Fetch all patients. Returns a list of dicts.
+    Pass randomize=True to return them in random order.
+    """
+    sql = "SELECT * FROM patients"
+    if randomize:
+        sql += " ORDER BY RANDOM()"
+    rows = execute(sql)
     for row in rows:
         if row.get("additional_descriptors"):
             row["additional_descriptors"] = json.loads(row["additional_descriptors"])
     return rows
 
 
-def get_all_patients():
-    """Fetch all patients. Returns a list of dicts."""
-    rows = execute("SELECT * FROM patients")
-    for row in rows:
-        if row.get("additional_descriptors"):
-            row["additional_descriptors"] = json.loads(row["additional_descriptors"])
-    return rows
-
-
-# Valid demographic groups
-DEMOGRAPHIC_GROUPS = {"soldier", "neonatal", "pediatric", "adult", "geriatric"}
+DEMOGRAPHIC_GROUPS = {"soldier", "adult"}
 
 
 def get_patients_by_demographic(group, count=None):
     """
-    Fetch patients belonging to a demographic group.
-
-    Args:
-        group  — one of: soldier, neonatal, pediatric, adult, geriatric
-        count  — optional, max number of patients to return
-
-    Returns a list of patient dicts.
-
-    Usage:
-        get_patients_by_demographic("soldier", count=5)
+    Fetch patients by demographic group. Pass randomize via get_all_patients
+    or add ORDER BY RANDOM() here if needed.
     """
     if group not in DEMOGRAPHIC_GROUPS:
         raise ValueError(f"Unknown demographic group '{group}'. "
                          f"Valid options: {sorted(DEMOGRAPHIC_GROUPS)}")
 
+    sql = "SELECT * FROM patients WHERE demographic_group = ?"
+    params = (group,)
     if count is not None:
-        sql = """
-            SELECT p.* FROM patients p
-            JOIN patient_cohorts pc ON p.patient_id = pc.patient_id
-            JOIN cohorts c ON pc.cohort_id = c.cohort_id
-            WHERE c.cohort_type = ?
-            LIMIT ?
-        """
-        rows = execute(sql, (group, count))
-    else:
-        sql = """
-            SELECT p.* FROM patients p
-            JOIN patient_cohorts pc ON p.patient_id = pc.patient_id
-            JOIN cohorts c ON pc.cohort_id = c.cohort_id
-            WHERE c.cohort_type = ?
-        """
-        rows = execute(sql, (group,))
+        sql += " LIMIT ?"
+        params = (group, count)
 
+    rows = execute(sql, params)
     for row in rows:
         if row.get("additional_descriptors"):
             row["additional_descriptors"] = json.loads(row["additional_descriptors"])

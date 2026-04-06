@@ -73,19 +73,39 @@ def get_latest_run_per_controller(experiment_id):
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
-def insert_metric(experiment_id, run_id=None, mae=None, median=None,
-                  std_dev=None, time_within_target_range=None, metric_id=None):
-    """Insert a metric record after a run completes. Returns the metric_id."""
+def insert_metric(experiment_id, run_id=None, mean_absolute_error=None,
+                  controller_start_time=None, mean=None, std_dev=None,
+                  time_within_target_range=None,
+                  percent_time_within_target_range=None, metric_id=None):
+    """
+    Insert a metric record after a run completes. Returns the metric_id.
+
+    Usage with Metric dataclass:
+        from data_classes import Metric
+        m = Metric(experiment_id=..., mean_absolute_error=2.5, ...)
+        insert_metric(
+            experiment_id=m.experiment_id,
+            run_id=run_id,
+            mean_absolute_error=m.mean_absolute_error,
+            controller_start_time=m.controller_start_time,
+            mean=m.mean,
+            std_dev=m.std_dev,
+            time_within_target_range=m.time_within_target_range,
+            percent_time_within_target_range=m.percent_time_within_target_range
+        )
+    """
     mid = metric_id or str(uuid.uuid4())
 
     with transaction() as conn:
         conn.execute("""
             INSERT INTO metrics
-                (metric_id, experiment_id, run_id, mae, median,
-                 std_dev, time_within_target_range)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (mid, experiment_id, run_id, mae, median, std_dev,
-              time_within_target_range))
+                (metric_id, experiment_id, run_id, mean_absolute_error,
+                 controller_start_time, mean, std_dev,
+                 time_within_target_range, percent_time_within_target_range)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (mid, experiment_id, run_id, mean_absolute_error,
+              controller_start_time, mean, std_dev,
+              time_within_target_range, percent_time_within_target_range))
 
     return mid
 
