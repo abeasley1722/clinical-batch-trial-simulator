@@ -170,6 +170,7 @@ class Experiment:
     output_columns: list[str] 
     output_dir: str
     analysis: Metric
+    mean_csv_path: str | None = None
 
     @classmethod
     def from_json(cls, json_data, patient_list: list[str], file_path: str, experiment_id: str) -> 'Experiment':
@@ -193,5 +194,6 @@ class Experiment:
                 std_dev=0.0,  # Placeholder
                 time_within_target_range=0.0,  # Placeholder
                 percent_time_within_target_range=0.0  # Placeholder
-            )
+            ),
+            mean_csv_path=None
         )

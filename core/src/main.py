@@ -22,6 +22,7 @@ import zipfile
 import argparse
 import uuid
 import requests as http_requests
+import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
@@ -91,8 +92,10 @@ from pulse.cdm.io.patient import serialize_patient_from_file
 # Use absolute paths from PROJECT_ROOT (works even after os.chdir())
 PATIENTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'patients')
 EXPERIMENT_RESULTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'experiment_results')
+ANALYSIS_RESULTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'analysis_results')
 Path(PATIENTS_FOLDER).mkdir(parents=True, exist_ok=True)
 Path(EXPERIMENT_RESULTS_FOLDER).mkdir(parents=True, exist_ok=True)
+Path(ANALYSIS_RESULTS_FOLDER).mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -2026,7 +2029,31 @@ def run_batch_thread(batch_id, batch):
         clear_batch_cancel_flag(batch_id)
 
         #TODO: do analysis
+        #get a list of all completed csv paths
+        completed_csv_paths = [p for job, p in csv_paths.items() 
+                               if batches[batch_id]['patients'][job]['status'] == 'complete']
         
+        #build dataframes for analysis
+        dfs = []
+        for path in completed_csv_paths:
+            df = pd.read_csv(path)
+
+            #keep only timestamp and user selected columns
+            cols_to_keep = ['sim_time_s'] + [c for c in experiment.output_columns if c in df.columns]
+            df = df[cols_to_keep]
+
+            #round timestamps to nearest millisecond
+            df['sim_time_s'] = df['sim_time_s'].round(3)
+
+            dfs.append(df)
+
+        #concatenate all dataframes into one
+        if dfs:
+            all_data = pd.concat(dfs, ignore_index=True)
+
+            mean_df = all_data.groupby('sim_time_s').mean().reset_index()
+            mean_df.to_csv(ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv", index=False)
+
         #insert experiement into database
         insert_experiment_from_object(experiment)
 
@@ -2069,6 +2096,7 @@ if __name__ == '__main__':
         {'name': 'soldier', 'count': 4},
         {'name': 'adult', 'count': 20}
         ],
+        'target_metric': 
         'duration_s': 300,
         'sample_rate_hz': 50,
         'start_intubated': False,
