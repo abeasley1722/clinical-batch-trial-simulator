@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     simulation_duration INTEGER,
     events              TEXT,           -- JSON blob
     output_columns      TEXT,           -- JSON blob
+    mean_csv_path       TEXT,
     status              TEXT NOT NULL DEFAULT 'pending',
     created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -30,29 +31,6 @@ CREATE TABLE IF NOT EXISTS scenarios (
     scenario_type   TEXT,
     scenario_time   INTEGER,
     FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
-);
-"""
-
-# Cohorts — defines a demographic group (soldier, adult, etc.)
-CREATE_COHORTS = """
-CREATE TABLE IF NOT EXISTS cohorts (
-    cohort_id   TEXT PRIMARY KEY,
-    cohort_type TEXT NOT NULL,
-    description TEXT
-);
-"""
-
-# Patient_Cohorts — links patients to cohorts (many-to-many)
-# NOTE (branch 72 — cohort_builder.py):
-#   After inserting a patient, call add_patient_to_cohort(patient_id, cohort_id)
-#   to link them. cohort_id should come from insert_cohort() first.
-CREATE_PATIENT_COHORTS = """
-CREATE TABLE IF NOT EXISTS patient_cohorts (
-    patient_id  TEXT NOT NULL,
-    cohort_id   TEXT NOT NULL,
-    PRIMARY KEY (patient_id, cohort_id),
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
-    FOREIGN KEY (cohort_id)  REFERENCES cohorts(cohort_id)
 );
 """
 
@@ -103,13 +81,13 @@ CREATE_METRICS = """
 CREATE TABLE IF NOT EXISTS metrics (
     metric_id               TEXT PRIMARY KEY,
     experiment_id           TEXT NOT NULL,
-    run_id                  TEXT,
+    vital_sign              TEXT,
     mae                     REAL,
     median                  REAL,
     std_dev                 REAL,
     time_within_target_range REAL,
-    FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id),
-    FOREIGN KEY (run_id)        REFERENCES runs(run_id)
+    percent_time_within_target_range REAL,
+    FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
 );
 """
 

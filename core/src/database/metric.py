@@ -10,7 +10,7 @@ Description:   Run and Metric table write and read operations.
 
 import uuid
 from database.connection import transaction, execute, execute_one
-
+from data_classes import Metric
 
 # ── Runs ──────────────────────────────────────────────────────────────────────
 
@@ -88,6 +88,16 @@ def insert_metric(experiment_id, run_id=None, mae=None, median=None,
               time_within_target_range))
 
     return mid
+
+def insert_metric_from_object(metric: Metric):
+    """Helper to insert a Metric dataclass instance."""
+    return insert_metric(
+        experiment_id=metric.experiment_id,
+        mae=metric.mean_absolute_error,
+        median=metric.mean,
+        std_dev=metric.std_dev,
+        time_within_target_range=metric.time_within_target_range
+    )
 
 
 def get_metrics_by_experiment(experiment_id):

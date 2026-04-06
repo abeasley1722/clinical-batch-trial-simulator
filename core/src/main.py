@@ -23,6 +23,7 @@ import argparse
 import uuid
 import requests as http_requests
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 
@@ -45,12 +46,12 @@ from controllers import HTTPController, HTTPFluidController, BuiltinController, 
 from cohort_builder import PatientGenerator, stabilize_patient
 from vital_ranges import SOLDIER, ADULT, Demographic
 
-from data_classes import Experiment, Patient, Scenario
+from data_classes import Experiment, Patient, Scenario, Metric
 
 from init_db import init_db
 from database.patient import get_patients_by_demographic
 from database.batch import insert_batch
-from database.metric import insert_metric, insert_run
+from database.metric import insert_metric, insert_metric_from_object, insert_run
 from database.experiment import insert_experiment_from_object
 
 init_db()  # Ensure DB is initialized
@@ -2028,35 +2029,6 @@ def run_batch_thread(batch_id, batch):
             del batch_cancel_flags[batch_id]
         clear_batch_cancel_flag(batch_id)
 
-        #TODO: do analysis
-        #get a list of all completed csv paths
-        completed_csv_paths = [p for job, p in csv_paths.items() 
-                               if batches[batch_id]['patients'][job]['status'] == 'complete']
-        
-        #build dataframes for analysis
-        dfs = []
-        for path in completed_csv_paths:
-            df = pd.read_csv(path)
-
-            #keep only timestamp and user selected columns
-            cols_to_keep = ['sim_time_s'] + [c for c in experiment.output_columns if c in df.columns]
-            df = df[cols_to_keep]
-
-            #round timestamps to nearest millisecond
-            df['sim_time_s'] = df['sim_time_s'].round(3)
-
-            dfs.append(df)
-
-        #concatenate all dataframes into one
-        if dfs:
-            all_data = pd.concat(dfs, ignore_index=True)
-
-            mean_df = all_data.groupby('sim_time_s').mean().reset_index()
-            mean_df.to_csv(ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv", index=False)
-
-        #insert experiement into database
-        insert_experiment_from_object(experiment)
-
     except Exception as e:
         import traceback
         with batch_lock:
@@ -2064,6 +2036,115 @@ def run_batch_thread(batch_id, batch):
             batches[batch_id]['message'] = str(e)
             batches[batch_id]['traceback'] = traceback.format_exc()
         print(f"Batch {batch_id} failed: {e}")
+
+    # --- ANALYSIS PHASE ---
+
+    #get a list of all completed csv paths
+    completed_csv_paths = [p for job, p in csv_paths.items() 
+                            if batches[batch_id]['patients'][job]['status'] == 'complete']
+    
+    #build dataframes for analysis
+    dfs = []
+    for path in completed_csv_paths:
+        df = pd.read_csv(path)
+
+        #keep only timestamp and user selected columns
+        cols_to_keep = ['sim_time_s'] + [c for c in experiment.output_columns if c in df.columns]
+        df = df[cols_to_keep]
+
+        #round timestamps to nearest millisecond
+        df['sim_time_s'] = df['sim_time_s'].round(3)
+
+    dfs.append(df)
+
+    #concatenate all dataframes into one
+    all_data = pd.DataFrame()
+    if dfs:
+        all_data = pd.concat(dfs, ignore_index=True)
+
+    mean_df = all_data.groupby('sim_time_s').mean().reset_index()
+
+    #save mean csv to database and filesystem
+    mean_df.to_csv(ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv", index=False)
+    experiment.mean_csv_path = ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv"
+
+    #insert experiment into database
+    insert_experiment_from_object(experiment)
+
+    #get controller start time
+    start_time_df = pd.read_csv(completed_csv_paths[0])
+    start_time_df['sim_time_s'] = start_time_df['sim_time_s'].round(3)
+
+    #find first activation timestamp
+    active_mask = (start_time_df['controller_active'] == 1) | (start_time_df['fluid_controller_active'] == 1)
+
+    if active_mask.any():
+        controller_start_time = float(start_time_df.loc[active_mask, 'sim_time_s'].iloc[0])
+    else:
+        controller_start_time = 0.0
+
+    #do analysis of each desired metric
+    metrics_list = []
+
+    target_metrics = batch.get('target_metrics', {})
+    metric_keys = [k for k in target_metrics.keys() if k in mean_df.columns]
+
+    if not metric_keys:
+        return []
+
+    # Extract matrix of values (N timesteps x M metrics)
+    values_matrix = mean_df[metric_keys].to_numpy(dtype=float)  # shape: (N, M)
+    sim_time = mean_df['sim_time_s'].to_numpy(dtype=float)
+
+    dt = sim_time[1] - sim_time[0]
+
+    # Build target + tolerance arrays aligned with columns
+    target_values = np.array([target_metrics[k]['target_value'] for k in metric_keys])
+    tolerances = np.array([target_metrics[k]['tolerance'] for k in metric_keys])
+
+    lower_bounds = target_values - tolerances
+    upper_bounds = target_values + tolerances
+
+    # --- Vectorized calculations ---
+
+    # Mean & std (per column)
+    means = values_matrix.mean(axis=0)
+    stds = values_matrix.std(axis=0)
+
+    # Mean absolute error (broadcast target_values across rows)
+    mae = np.abs(values_matrix - target_values).mean(axis=0)
+
+    # Masks
+    within_target = (values_matrix >= lower_bounds) & (values_matrix <= upper_bounds)
+
+    after_start = sim_time >= controller_start_time
+    after_start_mask = after_start[:, None]  # reshape for broadcasting
+
+    valid_mask = within_target & after_start_mask
+
+    # Time calculations
+    time_within_target = valid_mask.sum(axis=0) * dt
+    percent_time_within_target = valid_mask.sum(axis=0) / after_start.sum() * 100
+
+    # --- Build Metric objects ---
+    for i, vital_sign in enumerate(metric_keys):
+        metric_obj = Metric(
+            experiment_id=experiment.experiment_id,
+            vital_sign_measured=vital_sign,
+            mean_absolute_error=mae[i],
+            controller_start_time=controller_start_time,
+            mean=means[i],
+            std_dev=stds[i],
+            target_value=target_values[i],
+            tolerance=tolerances[i],
+            time_within_target_range=time_within_target[i],
+            percent_time_within_target_range=percent_time_within_target[i]
+        )
+        metrics_list.append(metric_obj)
+
+    # Insert metrics into database
+    for metric in metrics_list:
+        insert_metric_from_object(metric)
 
 if __name__ == '__main__':
     from multiprocessing import freeze_support
@@ -2096,7 +2177,24 @@ if __name__ == '__main__':
         {'name': 'soldier', 'count': 4},
         {'name': 'adult', 'count': 20}
         ],
-        'target_metric': 
+        'target_metrics': {
+            'hr_bpm': {
+                'target_value': 75,
+                'tolerance': 5 
+            },
+            'spo2_pct': {
+                'target_value': 98,
+                'tolerance': 2
+            },
+            'etco2_mmhg': {
+                'target_value': 40,
+                'tolerance': 5
+            },
+            'rr_patient': {
+                'target_value': 16,
+                'tolerance': 3
+            }
+        },
         'duration_s': 300,
         'sample_rate_hz': 50,
         'start_intubated': False,

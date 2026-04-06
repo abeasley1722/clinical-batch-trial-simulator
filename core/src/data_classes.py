@@ -14,7 +14,6 @@ Description:    Defines the Experiment object that represents a simulation reque
 ============================================================ 
 """
 
-from __future__ import annotations
 import uuid
 import json
 from dataclasses import dataclass, asdict, field
@@ -142,22 +141,6 @@ class Scenario:
             "trigger": self.trigger,
             **self.params
         }
-    
-@dataclass
-class Metric:
-    experiment_id: str
-    mean_absolute_error: float
-    controller_start_time: float
-    mean: float
-    std_dev: float
-    time_within_target_range: float
-    percent_time_within_target_range: float
-    #TODO: varvel error measurement
-    #TODO: user defined function comparison
-
-    def create_metric(self, experiment: Experiment):
-        self.experiment_id = experiment.experiment_id
-        #TODO: Implement metric creation logic
 
 
 @dataclass
@@ -169,7 +152,6 @@ class Experiment:
     events: list[dict]
     output_columns: list[str] 
     output_dir: str
-    analysis: Metric
     mean_csv_path: str | None = None
 
     @classmethod
@@ -184,16 +166,22 @@ class Experiment:
             patients = patient_list,
             simulation_duration = json_data.get("duration_s", 0),
             events = json_data.get("events", []), 
-            output_columns = json_data.get("output_columns", []),
+            output_columns = list(json_data.get("target_metrics", {}).keys()),
             output_dir = file_path,
-            analysis = Metric(
-                experiment_id=experiment_id,
-                mean_absolute_error=0.0,  # Placeholder, to be calculated after simulation
-                controller_start_time=0.0,  # Placeholder
-                mean=0.0,  # Placeholder
-                std_dev=0.0,  # Placeholder
-                time_within_target_range=0.0,  # Placeholder
-                percent_time_within_target_range=0.0  # Placeholder
-            ),
             mean_csv_path=None
         )
+
+@dataclass
+class Metric:
+    experiment_id: str
+    vital_sign_measured: str
+    mean_absolute_error: float
+    controller_start_time: float
+    mean: float
+    std_dev: float
+    target_value: float
+    tolerance: float
+    time_within_target_range: float
+    percent_time_within_target_range: float
+    #TODO: varvel error measurement
+    #TODO: user defined function comparison

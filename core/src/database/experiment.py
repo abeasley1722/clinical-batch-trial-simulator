@@ -31,7 +31,7 @@ from data_classes import Experiment
 
 def insert_experiment(experiment_id, name, target_metric=None,
                       custom_target_value=None, simulation_duration=None,
-                      events=None, output_columns=None, status='pending'):
+                      events=None, output_columns=None, mean_csv_path=None, status='pending'):
     """
     Insert an experiment record. Returns the experiment_id.
     events and output_columns should be lists — stored as JSON.
@@ -43,10 +43,10 @@ def insert_experiment(experiment_id, name, target_metric=None,
         conn.execute("""
             INSERT INTO experiments
                 (experiment_id, name, target_metric, custom_target_value,
-                 simulation_duration, events, output_columns, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 simulation_duration, events, output_columns, mean_csv_path, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (experiment_id, name, target_metric, custom_target_value,
-              simulation_duration, events_json, output_columns_json, status))
+              simulation_duration, events_json, output_columns_json, mean_csv_path, status))
 
     return experiment_id
 
@@ -57,7 +57,8 @@ def insert_experiment_from_object(experiment: Experiment):
         name=experiment.name,
         simulation_duration=experiment.simulation_duration,
         events=experiment.events,
-        output_columns=experiment.output_columns
+        output_columns=experiment.output_columns,
+        mean_csv_path=experiment.mean_csv_path
     )
 
 def get_experiment(experiment_id):

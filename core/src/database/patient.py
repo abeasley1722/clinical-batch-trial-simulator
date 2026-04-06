@@ -13,7 +13,7 @@ from database.connection import transaction, execute, execute_one
 
 def insert_patient(sex=None, age=None, height=None,
                    weight=None, json_file=None, additional_descriptors=None,
-                   patient_id=None):
+                   patient_id=None, demographic_group=None):
     """
     Insert a patient record. Returns the patient_id.
     Pass patient_id if you already have one, otherwise a UUID is generated.
@@ -31,9 +31,9 @@ def insert_patient(sex=None, age=None, height=None,
     with transaction() as conn:
         conn.execute("""
             INSERT INTO patients
-                (patient_id, sex, age, height, weight, json_file, additional_descriptors)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (pid, sex, age, height, weight, json_file, descriptors))
+                (patient_id, sex, age, height, weight, json_file, additional_descriptors, demographic_group)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pid, sex, age, height, weight, json_file, descriptors, demographic_group))
 
     return pid
 
@@ -70,7 +70,6 @@ def get_all_patients():
 
 # Valid demographic groups
 DEMOGRAPHIC_GROUPS = {"soldier", "adult"}
-
 
 def get_patients_by_demographic(group, count=None):
     """

@@ -21,7 +21,7 @@ from database.metric import (
     get_metrics_by_run,
 )
 from database.batch import get_batches_by_experiment
-from database.experiment_db import get_experiment
+from database.experiment import get_experiment
 
 
 def get_all_runs(experiment_id):
