@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS metrics (
     std_dev                         REAL,
     time_within_target_range        REAL,
     percent_time_within_target_range REAL,
+    wobble                          REAL,   -- Varvel 1992 Eq. 5 (%)
+    divergence                      REAL,   -- Varvel 1992 Eq. 3 (%/hr)
     FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id),
     FOREIGN KEY (run_id)        REFERENCES runs(run_id)
 );

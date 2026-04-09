@@ -76,13 +76,16 @@ def get_latest_run_per_controller(experiment_id):
 def insert_metric(experiment_id, run_id=None, mean_absolute_error=None,
                   controller_start_time=None, mean=None, std_dev=None,
                   time_within_target_range=None,
-                  percent_time_within_target_range=None, metric_id=None):
+                  percent_time_within_target_range=None,
+                  wobble=None, divergence=None, metric_id=None):
     """
     Insert a metric record after a run completes. Returns the metric_id.
 
     Usage with Metric dataclass:
         from data_classes import Metric
+        from analysis import compute_wobble_divergence
         m = Metric(experiment_id=..., mean_absolute_error=2.5, ...)
+        wobble, divergence = compute_wobble_divergence(times, measured, target)
         insert_metric(
             experiment_id=m.experiment_id,
             run_id=run_id,
@@ -91,7 +94,9 @@ def insert_metric(experiment_id, run_id=None, mean_absolute_error=None,
             mean=m.mean,
             std_dev=m.std_dev,
             time_within_target_range=m.time_within_target_range,
-            percent_time_within_target_range=m.percent_time_within_target_range
+            percent_time_within_target_range=m.percent_time_within_target_range,
+            wobble=wobble,
+            divergence=divergence
         )
     """
     mid = metric_id or str(uuid.uuid4())
@@ -101,11 +106,13 @@ def insert_metric(experiment_id, run_id=None, mean_absolute_error=None,
             INSERT INTO metrics
                 (metric_id, experiment_id, run_id, mean_absolute_error,
                  controller_start_time, mean, std_dev,
-                 time_within_target_range, percent_time_within_target_range)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 time_within_target_range, percent_time_within_target_range,
+                 wobble, divergence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (mid, experiment_id, run_id, mean_absolute_error,
               controller_start_time, mean, std_dev,
-              time_within_target_range, percent_time_within_target_range))
+              time_within_target_range, percent_time_within_target_range,
+              wobble, divergence))
 
     return mid
 
