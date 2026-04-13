@@ -27,6 +27,11 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 
+import sympy as sp
+import numpy as np
+from sympy.utilities.lambdify import lambdify
+ALLOWED_SYMPY_MODULES = ["numpy"]  # safe numpy-backed math
+
 # === PATH SETUP (MUST be before importing local modules) ===
 # Navigate up from core/src to project root, then into pulse_engine
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,7 +57,7 @@ from init_db import init_db
 from database.patient import get_patients_by_demographic
 from database.batch import insert_batch
 from database.metric import insert_metric, insert_metric_from_object, insert_run
-from database.experiment import insert_experiment_from_object
+from database.experiment import insert_experiment_from_object, update_experiment_from_object
 
 init_db()  # Ensure DB is initialized
 
@@ -308,6 +313,45 @@ def build_csv_columns(selected_vars):
     cols.extend([v["key"] for v in selected_vars])
     cols.extend(ALWAYS_INCLUDED_COLUMNS)
     return cols
+
+def parse_matching_function(expr_str: str):
+    """
+    Parses a user-defined math string into a callable numpy function.
+    
+    Supports: log, exp, sin, cos, sqrt, abs, x (the simulation value), t (sim time)
+    Returns: callable(x, t=None) -> np.ndarray
+    Raises: ValueError on invalid/unsafe input
+    """
+    if not expr_str or not isinstance(expr_str, str):
+        return None
+    
+    # Whitelist: only allow safe characters
+    import re
+    if re.search(r'[^a-zA-Z0-9\s\+\-\*\/\(\)\.\,\_\^]', expr_str):
+        raise ValueError(f"Invalid characters in matching function: '{expr_str}'")
+    
+    # Replace ^ with ** for power operator
+    expr_str = expr_str.replace("^", "**")
+
+    try:
+        x, t = sp.symbols('x t')
+        expr = sp.sympify(expr_str, locals={'x': x, 't': t})
+        
+        # Check for disallowed sympy types (e.g. relational, boolean)
+        if not isinstance(expr, sp.Basic):
+            raise ValueError("Expression must be a scalar math expression.")
+        
+        # Lambdify with numpy backend
+        free = expr.free_symbols
+        if t in free:
+            func = lambdify((x, t), expr, modules=ALLOWED_SYMPY_MODULES)
+            return lambda x_arr, t_arr: func(x_arr, t_arr)
+        else:
+            func = lambdify(x, expr, modules=ALLOWED_SYMPY_MODULES)
+            return lambda x_arr, t_arr=None: func(x_arr)
+
+    except (sp.SympifyError, TypeError, AttributeError) as e:
+        raise ValueError(f"Could not parse matching function '{expr_str}': {e}")
 
 # === BATCH MODE SUPPORT ===
 batches = {}
@@ -1807,10 +1851,18 @@ def run_batch_thread(batch_id, batch):
     #draw patients from database
     for demo_spec in demographics:
         demo_obj = demographic_map.get(demo_spec['name'])
-        patients_drawn = len(patients)
-        patients += get_patients_by_demographic(demo_obj, demo_spec.get('count', 0))
-        patients_drawn = len(patients) - patients_drawn
-        demo_spec['count'] -= patients_drawn
+        if demo_obj is None:
+            print(f"[Batch] Warning: Unknown demographic '{demo_spec['name']}' - skipping database draw for this group")
+            continue
+        
+        drawn = get_patients_by_demographic(demo_obj.demo_name, demo_spec.get('count', 0))
+        for row in drawn:
+            patients.append({
+                'name': f"{row['demographic_group']}_{row['patient_id']}",
+                'json': None,
+                'id': row['patient_id']
+            })
+        demo_spec['count'] -= len(drawn)
 
     #generate patients if not enough patients in database match criteria
     generator = PatientGenerator(random.seed())
@@ -1857,7 +1909,6 @@ def run_batch_thread(batch_id, batch):
             results.append(result)
 
     #add generated patients to cohort
-    patients = []
     for r in results:
         if r['status'] == 'success':
             patients.append({
@@ -1866,11 +1917,13 @@ def run_batch_thread(batch_id, batch):
                 'id': r.get('id')
             })
 
-    #generate experiment object
     # Create output directory
     batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}")
     os.makedirs(batch_dir, exist_ok=True)
+
+    #create experiment and insert into database
     experiment = Experiment.from_json(batch, patients, batch_dir, batch_id)
+    insert_experiment_from_object(experiment)
 
     workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
     total_jobs = len(patients)
@@ -2068,8 +2121,8 @@ def run_batch_thread(batch_id, batch):
     mean_df.to_csv(ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv", index=False)
     experiment.mean_csv_path = ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv"
 
-    #insert experiment into database
-    insert_experiment_from_object(experiment)
+    #update experiment in database with mean csv path
+    update_experiment_from_object(experiment)
 
     #get controller start time
     start_time_df = pd.read_csv(completed_csv_paths[0])
@@ -2128,6 +2181,7 @@ def run_batch_thread(batch_id, batch):
 
     # --- Build Metric objects ---
     for i, vital_sign in enumerate(metric_keys):
+        col = values_matrix[:, i]
         metric_obj = Metric(
             experiment_id=experiment.experiment_id,
             vital_sign_measured=vital_sign,
@@ -2141,6 +2195,22 @@ def run_batch_thread(batch_id, batch):
             percent_time_within_target_range=percent_time_within_target[i]
         )
         metrics_list.append(metric_obj)
+
+        #check matching function
+        expr_str = target_metrics[vital_sign].get('matching_function', None)
+        if expr_str:
+            try:
+                func = parse_matching_function(expr_str)
+                transformed = func(col_after, sim_time)
+                #only analyze data after controller start time
+                col_after = col[after_start]
+                transformed_after = transformed[after_start]
+                matching_mae = float(np.abs(col_after - transformed_after).mean())
+                metric_obj.matching_function = expr_str
+                metric_obj.matching_function_mae = matching_mae
+            except ValueError as e:
+                # Log and continue — don't let a bad expression break analysis
+                print(f"Warning: could not evaluate matching_function for {vital_sign}: {e}")
 
     # Insert metrics into database
     for metric in metrics_list:
@@ -2171,28 +2241,32 @@ if __name__ == '__main__':
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     id = str(uuid.uuid4())[:8]
     batch_id = f"{timestamp}_{id}"
-    run_batch_thread(batch_id, { #TODO: add target metric and target value, etc
+    run_batch_thread(batch_id, {
         'name': 'Test Batch',
         'demographics': [
-        {'name': 'soldier', 'count': 4},
-        {'name': 'adult', 'count': 20}
+        {'name': 'soldier', 'count': 2},
+        {'name': 'adult', 'count': 10}
         ],
         'target_metrics': {
             'hr_bpm': {
                 'target_value': 75,
-                'tolerance': 5 
+                'tolerance': 5,
+                'matching_function' :  'log(x)'
             },
             'spo2_pct': {
                 'target_value': 98,
-                'tolerance': 2
+                'tolerance': 2,
+                'matching_function' : ''
             },
             'etco2_mmhg': {
                 'target_value': 40,
-                'tolerance': 5
+                'tolerance': 5,
+                'matching_function' : ''
             },
             'rr_patient': {
                 'target_value': 16,
-                'tolerance': 3
+                'tolerance': 3,
+                'matching_function' : ''
             }
         },
         'duration_s': 300,

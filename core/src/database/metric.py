@@ -73,19 +73,20 @@ def get_latest_run_per_controller(experiment_id):
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
-def insert_metric(experiment_id, run_id=None, mae=None, median=None,
-                  std_dev=None, time_within_target_range=None, metric_id=None):
+def insert_metric(experiment_id, vital_sign=None, mae=None, median=None,
+                  std_dev=None, time_within_target_range=None, percent_time_within_target_range=None,
+                  matching_function=None, matching_function_mae=None, metric_id=None):
     """Insert a metric record after a run completes. Returns the metric_id."""
     mid = metric_id or str(uuid.uuid4())
 
     with transaction() as conn:
         conn.execute("""
             INSERT INTO metrics
-                (metric_id, experiment_id, run_id, mae, median,
-                 std_dev, time_within_target_range)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (mid, experiment_id, run_id, mae, median, std_dev,
-              time_within_target_range))
+                (metric_id, experiment_id, vital_sign, mae, median,
+                 std_dev, time_within_target_range, percent_time_within_target_range, matching_function, matching_function_mae)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (mid, experiment_id, vital_sign, mae, median, std_dev,
+              time_within_target_range, percent_time_within_target_range, matching_function, matching_function_mae))
 
     return mid
 
@@ -93,12 +94,15 @@ def insert_metric_from_object(metric: Metric):
     """Helper to insert a Metric dataclass instance."""
     return insert_metric(
         experiment_id=metric.experiment_id,
+        vital_sign=metric.vital_sign_measured,
         mae=metric.mean_absolute_error,
         median=metric.mean,
         std_dev=metric.std_dev,
-        time_within_target_range=metric.time_within_target_range
+        time_within_target_range=metric.time_within_target_range,
+        percent_time_within_target_range=metric.percent_time_within_target_range,
+        matching_function=metric.matching_function,
+        matching_function_mae=metric.matching_function_mae
     )
-
 
 def get_metrics_by_experiment(experiment_id):
     """Fetch all metrics for an experiment. Returns a list of dicts."""

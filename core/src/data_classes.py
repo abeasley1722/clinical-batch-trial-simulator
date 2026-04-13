@@ -183,5 +183,7 @@ class Metric:
     tolerance: float
     time_within_target_range: float
     percent_time_within_target_range: float
+    matching_function: str | None = None
+    matching_function_mae: float | None = None
     #TODO: varvel error measurement
-    #TODO: user defined function comparison
+    
