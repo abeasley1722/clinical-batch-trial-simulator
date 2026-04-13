@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS metrics (
     std_dev                 REAL,
     time_within_target_range REAL,
     percent_time_within_target_range REAL,
+    wobble                  REAL,
+    divergence              REAL,
     matching_function       TEXT,
     matching_function_mae   REAL,
     FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)

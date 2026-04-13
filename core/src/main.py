@@ -50,7 +50,7 @@ from flask_socketio import SocketIO, emit
 from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
 from cohort_builder import PatientGenerator, stabilize_patient
 from vital_ranges import SOLDIER, ADULT, Demographic
-
+from analysis import compute_wobble_divergence
 from data_classes import Experiment, Patient, Scenario, Metric
 
 from init_db import init_db
@@ -2182,6 +2182,11 @@ def run_batch_thread(batch_id, batch):
     # --- Build Metric objects ---
     for i, vital_sign in enumerate(metric_keys):
         col = values_matrix[:, i]
+        col_after = col[after_start]
+        time_after = sim_time[after_start]
+
+        wobble, divergence = compute_wobble_divergence(time_after, col_after, target_values[i])
+
         metric_obj = Metric(
             experiment_id=experiment.experiment_id,
             vital_sign_measured=vital_sign,
@@ -2192,18 +2197,18 @@ def run_batch_thread(batch_id, batch):
             target_value=target_values[i],
             tolerance=tolerances[i],
             time_within_target_range=time_within_target[i],
-            percent_time_within_target_range=percent_time_within_target[i]
+            percent_time_within_target_range=percent_time_within_target[i],
+            wobble=wobble,
+            divergence=divergence
         )
-        metrics_list.append(metric_obj)
 
         #check matching function
         expr_str = target_metrics[vital_sign].get('matching_function', None)
         if expr_str:
             try:
                 func = parse_matching_function(expr_str)
-                transformed = func(col_after, sim_time)
+                transformed = func(col, sim_time)
                 #only analyze data after controller start time
-                col_after = col[after_start]
                 transformed_after = transformed[after_start]
                 matching_mae = float(np.abs(col_after - transformed_after).mean())
                 metric_obj.matching_function = expr_str
@@ -2211,6 +2216,8 @@ def run_batch_thread(batch_id, batch):
             except ValueError as e:
                 # Log and continue — don't let a bad expression break analysis
                 print(f"Warning: could not evaluate matching_function for {vital_sign}: {e}")
+
+        metrics_list.append(metric_obj)
 
     # Insert metrics into database
     for metric in metrics_list:
@@ -2244,8 +2251,8 @@ if __name__ == '__main__':
     run_batch_thread(batch_id, {
         'name': 'Test Batch',
         'demographics': [
-        {'name': 'soldier', 'count': 2},
-        {'name': 'adult', 'count': 10}
+        {'name': 'soldier', 'count': 4},
+        {'name': 'adult', 'count': 4}
         ],
         'target_metrics': {
             'hr_bpm': {
