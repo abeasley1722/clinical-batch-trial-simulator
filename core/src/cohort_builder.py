@@ -23,25 +23,14 @@ import argparse
 import random
 import hashlib
 import uuid
-from database.patient import insert_patient
+from core.src.database.patient import insert_patient
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import List, Optional
 from multiprocessing import Pool, cpu_count
 
-# === PATH SETUP (MUST be before importing local modules) ===
-# Navigate up from core/src to project root, then into pulse_engine
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
-PULSE_BIN = os.path.join(PULSE_HOME, "bin")
-PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
-
-sys.path.insert(0, PULSE_PYTHON)
-sys.path.insert(0, PULSE_BIN)
-os.add_dll_directory(PULSE_BIN)
-
-from vital_ranges import SOLDIER, ADULT, Demographic
+from core.src.vital_ranges import SOLDIER, ADULT, Demographic
 
 @dataclass
 class PatientProfile:

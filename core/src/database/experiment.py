@@ -26,8 +26,8 @@ Merge note (branch 72):
 """
 
 import json
-from database.connection import transaction, execute, execute_one
-from data_classes import Experiment
+from core.src.database.connection import transaction, execute, execute_one
+from core.src.data_classes import Experiment
 
 def insert_experiment(experiment_id, name, target_metric=None,
                       custom_target_value=None, simulation_duration=None,

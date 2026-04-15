@@ -2,7 +2,7 @@
 ============================================================
 Author:        Zachary Kao
 Date Created:  2026-03-12
-Description:   Main entry point for the core simulation server.
+Description:   Business logic for the core simulation server.
 ============================================================ 
 """
 
@@ -18,12 +18,12 @@ import time
 import io
 import csv
 import tempfile
-import zipfile
 import argparse
 import uuid
 import requests as http_requests
 import pandas as pd
 import numpy as np
+import math
 from datetime import datetime
 from pathlib import Path
 
@@ -32,32 +32,23 @@ import numpy as np
 from sympy.utilities.lambdify import lambdify
 ALLOWED_SYMPY_MODULES = ["numpy"]  # safe numpy-backed math
 
-# === PATH SETUP (MUST be before importing local modules) ===
-# Navigate up from core/src to project root, then into pulse_engine
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
-PULSE_BIN = os.path.join(PULSE_HOME, "bin")
-PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
-
-sys.path.insert(0, PULSE_PYTHON)
-sys.path.insert(0, PULSE_BIN)
-os.add_dll_directory(PULSE_BIN)
+from core.src.runtime_paths import APP_DATA_DIR, PULSE_BIN, PULSE_PYTHON
 
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
-from controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
-from cohort_builder import PatientGenerator, stabilize_patient
-from vital_ranges import SOLDIER, ADULT, Demographic
-from analysis import compute_wobble_divergence
-from data_classes import Experiment, Patient, Scenario, Metric
+from core.src.controllers import HTTPController, HTTPFluidController, BuiltinController, BuiltinFluidController, PULSE_UNIT_MAP
+from core.src.cohort_builder import PatientGenerator, stabilize_patient
+from core.src.vital_ranges import SOLDIER, ADULT, Demographic
+from core.src.analysis import compute_wobble_divergence
+from core.src.data_classes import Experiment, Patient, Scenario, Metric
 
-from init_db import init_db
-from database.patient import get_patients_by_demographic
-from database.batch import insert_batch
-from database.metric import insert_metric, insert_metric_from_object, insert_run
-from database.experiment import insert_experiment_from_object, update_experiment_from_object
+from core.src.init_db import init_db
+from core.src.database.patient import get_patients_by_demographic
+from core.src.database.batch import insert_batch
+from core.src.database.metric import insert_metric, insert_metric_from_object, insert_run
+from core.src.database.experiment import insert_experiment_from_object, update_experiment_from_object
 
 init_db()  # Ensure DB is initialized
 
@@ -95,26 +86,19 @@ from pulse.cdm.scalars import (
 from pulse.cdm.patient import eSex, SEPatient, SEPatientConfiguration
 from pulse.cdm.io.patient import serialize_patient_from_file
 
-# Use absolute paths from PROJECT_ROOT (works even after os.chdir())
-PATIENTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'patients')
-EXPERIMENT_RESULTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'experiment_results')
-ANALYSIS_RESULTS_FOLDER = os.path.join(PROJECT_ROOT, 'data', 'analysis_results')
-Path(PATIENTS_FOLDER).mkdir(parents=True, exist_ok=True)
-Path(EXPERIMENT_RESULTS_FOLDER).mkdir(parents=True, exist_ok=True)
-Path(ANALYSIS_RESULTS_FOLDER).mkdir(parents=True, exist_ok=True)
+from core.src.runtime_paths import APP_DATA_DIR    
+PATIENTS_FOLDER = APP_DATA_DIR / "patients"
+EXPERIMENT_RESULTS_FOLDER = APP_DATA_DIR / "experiment_results"
+ANALYSIS_RESULTS_FOLDER = APP_DATA_DIR / "analysis_results"
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+for folder in [PATIENTS_FOLDER, EXPERIMENT_RESULTS_FOLDER, ANALYSIS_RESULTS_FOLDER,
+]:
+    folder.mkdir(parents=True, exist_ok=True)
 
 jobs = {}
 job_lock = threading.Lock()
 cancel_flags = {}  # job_id -> True if should cancel
 pulse_config_lock = threading.Lock()
-
-# Live data streaming
-live_data_subscribers = {}  # job_id -> set of variables to stream
-live_data_lock = threading.Lock()
 
 # === AVAILABLE CSV OUTPUT VARIABLES ===
 # Each entry defines a Pulse data request that can be selected for CSV output.
@@ -352,6 +336,34 @@ def parse_matching_function(expr_str: str):
 
     except (sp.SympifyError, TypeError, AttributeError) as e:
         raise ValueError(f"Could not parse matching function '{expr_str}': {e}")
+    
+def allocate_counts(total, demographics):
+    #extract percentages
+    percents = [d.get('percent', 0.0) for d in demographics]
+
+    total_percent = sum(percents)
+    if total_percent == 0:
+        return [0] * len(demographics)
+    
+    #normalize to fractions
+    exact = [(p / total_percent) * total for p in percents]
+
+    #floor to get base counts, then distribute remainder by largest fractional part
+    base = [math.floor(x) for x in exact]
+    remainder = total - sum(base)
+
+    #sort by fractional part descending
+    fractions = sorted(
+        [(i, exact[i] - base[i]) for i in range(len(demographics))],
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    for i in range(remainder):
+        idx = fractions[i][0]
+        base[idx] += 1
+
+    return base
 
 # === BATCH MODE SUPPORT ===
 batches = {}
@@ -558,7 +570,7 @@ def run_single_patient(args):
         from pulse.cdm.io.patient import serialize_patient_from_file
         import tempfile
         
-        from controllers import BatchBuiltinController, BatchBuiltinFluidController, BatchHTTPController, BatchHTTPFluidController
+        from core.src.controllers import BatchBuiltinController, BatchBuiltinFluidController, BatchHTTPController, BatchHTTPFluidController
 
         # Local event handler for batch simulation (can't use main class due to multiprocessing)
         class BatchEventHandler(IEventHandler):
@@ -1848,6 +1860,14 @@ def run_batch_thread(batch_id, batch):
     }
     patients = []
 
+    #convert percentages to counts
+    total_patients = batch.get('patient_count', 0)
+    counts = allocate_counts(total_patients, demographics)
+
+    #add count to demographic specs
+    for demo_spec, count in zip(demographics, counts):
+        demo_spec['count'] = count
+
     #draw patients from database
     for demo_spec in demographics:
         demo_obj = demographic_map.get(demo_spec['name'])
@@ -1877,45 +1897,46 @@ def run_batch_thread(batch_id, batch):
             print(f"[Batch] Warning: Unknown demographic '{demo_name}' - skipping generation for this group")
 
     # Stabilize patients in parallel
-    num_workers = batch.get('workers', None)
-    if num_workers is None:
-        num_workers = max(1, (os.cpu_count() or 4) - 1)
-    print(f"\nStabilizing {len(generated_patients)} patients with {num_workers} workers...")
-    print(f"Estimated time: {len(generated_patients) * 2.5 / num_workers:.0f}-{len(generated_patients) * 3.5 / num_workers:.0f} minutes\n")
-    
-    # Prepare arguments for worker processes
-    output_dir = PATIENTS_FOLDER
-    work_items = [
-        (asdict(profile), output_dir, PULSE_BIN, PULSE_PYTHON, profile.demographic.demo_name)
-        for profile in generated_patients
-    ]
-    
-    # Run stabilization
-    from multiprocessing import freeze_support
-    freeze_support()
-    
-    results = []
-    completed = 0
-    failed = 0
-    
-    with ProcessPool(num_workers) as pool:
-        for result in pool.imap_unordered(stabilize_patient, work_items):
-            completed += 1
-            if result['status'] == 'success':
-                print(f"  [{completed}/{len(generated_patients)}] OK {result['name']}")
-            else:
-                failed += 1
-                print(f"  [{completed}/{len(generated_patients)}] FAIL {result['name']}: {result.get('message', 'Unknown error')}")
-            results.append(result)
+    if generated_patients:
+        num_workers = batch.get('workers', None)
+        if num_workers is None:
+            num_workers = max(1, (os.cpu_count() or 4) - 1)
+        print(f"\nStabilizing {len(generated_patients)} patients with {num_workers} workers...")
+        print(f"Estimated time: {len(generated_patients) * 2.5 / num_workers:.0f}-{len(generated_patients) * 3.5 / num_workers:.0f} minutes\n")
+        
+        # Prepare arguments for worker processes
+        output_dir = PATIENTS_FOLDER
+        work_items = [
+            (asdict(profile), output_dir, PULSE_BIN, PULSE_PYTHON, profile.demographic.demo_name)
+            for profile in generated_patients
+        ]
+        
+        # Run stabilization
+        from multiprocessing import freeze_support
+        freeze_support()
+        
+        results = []
+        completed = 0
+        failed = 0
+        
+        with ProcessPool(num_workers) as pool:
+            for result in pool.imap_unordered(stabilize_patient, work_items):
+                completed += 1
+                if result['status'] == 'success':
+                    print(f"  [{completed}/{len(generated_patients)}] OK {result['name']}")
+                else:
+                    failed += 1
+                    print(f"  [{completed}/{len(generated_patients)}] FAIL {result['name']}: {result.get('message', 'Unknown error')}")
+                results.append(result)
 
-    #add generated patients to cohort
-    for r in results:
-        if r['status'] == 'success':
-            patients.append({
-                'name': r['name'],
-                'json': None,  # Stable state is on disk under PATIENTS_FOLDER (e.g. name@0s.json)
-                'id': r.get('id')
-            })
+        #add generated patients to cohort
+        for r in results:
+            if r['status'] == 'success':
+                patients.append({
+                    'name': r['name'],
+                    'json': None,  # Stable state is on disk under PATIENTS_FOLDER (e.g. name@0s.json)
+                    'id': r.get('id')
+                })
 
     # Create output directory
     batch_dir = os.path.join(EXPERIMENT_RESULTS_FOLDER, f"batch_{batch_id}")
@@ -2118,8 +2139,8 @@ def run_batch_thread(batch_id, batch):
     mean_df = all_data.groupby('sim_time_s').mean().reset_index()
 
     #save mean csv to database and filesystem
-    mean_df.to_csv(ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv", index=False)
-    experiment.mean_csv_path = ANALYSIS_RESULTS_FOLDER + f"/batch_{batch_id}_mean.csv"
+    mean_df.to_csv(str(ANALYSIS_RESULTS_FOLDER / f"batch_{batch_id}_mean.csv"),index=False)
+    experiment.mean_csv_path = str(ANALYSIS_RESULTS_FOLDER / f"batch_{batch_id}_mean.csv")
 
     #update experiment in database with mean csv path
     update_experiment_from_object(experiment)
@@ -2223,66 +2244,3 @@ def run_batch_thread(batch_id, batch):
     for metric in metrics_list:
         insert_metric_from_object(metric)
 
-if __name__ == '__main__':
-    from multiprocessing import freeze_support
-    freeze_support()
-    
-    parser = argparse.ArgumentParser(description='Pulse Simulation Server')
-    parser.add_argument('--port', type=int, default=8080, help='Port to run on (default: 8080)')
-    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to (default: 0.0.0.0)')
-    args = parser.parse_args()
-    
-    print("\n" + "="*60)
-    print("  PULSE SIMULATION SERVER v6")
-    print("="*60)
-    print(f"  API running at http://{args.host}:{args.port}")
-    print(f"  WebSocket enabled for live data streaming")
-    print(f"  Pulse Home: {PULSE_HOME}")
-    print(f"  CPUs: {os.cpu_count()}")
-    print("="*60)
-    print("  Connect with pulse_gui.py or any HTTP client")
-    print("="*60 + "\n")
-
-    print("Running test of batch simulation")
-    #batch id should be in the form of timestamp_uuid for uniqueness and traceability
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    id = str(uuid.uuid4())[:8]
-    batch_id = f"{timestamp}_{id}"
-    run_batch_thread(batch_id, {
-        'name': 'Test Batch',
-        'demographics': [
-        {'name': 'soldier', 'count': 4},
-        {'name': 'adult', 'count': 4}
-        ],
-        'target_metrics': {
-            'hr_bpm': {
-                'target_value': 75,
-                'tolerance': 5,
-                'matching_function' :  'log(x)'
-            },
-            'spo2_pct': {
-                'target_value': 98,
-                'tolerance': 2,
-                'matching_function' : ''
-            },
-            'etco2_mmhg': {
-                'target_value': 40,
-                'tolerance': 5,
-                'matching_function' : ''
-            },
-            'rr_patient': {
-                'target_value': 16,
-                'tolerance': 3,
-                'matching_function' : ''
-            }
-        },
-        'duration_s': 300,
-        'sample_rate_hz': 50,
-        'start_intubated': False,
-        'vent_settings': {},
-        'events': [],
-        'workers': 4,
-        'replicates': 1
-    })
-
-    socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)

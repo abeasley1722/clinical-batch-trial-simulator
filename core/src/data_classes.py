@@ -2,15 +2,13 @@
 ============================================================
 Author:         Zachary Kao
 Date Created:   2026-03-12
-Description:    Defines the Experiment object that represents a simulation request and its metadata
-                including:
-                - patient/patients
-                - simulation duration
-                - scenario/scenarios information
-                - metrics needed
-                - controller
-                - events
-                - vitals altered by the controller
+Description:    Defines the data classes used for modeling data used by the Clinical Batch Trial Simulator. This includes:
+                - Patient: Represents a patient with demographics and descriptors.
+                - Batch: Represents a simulation batch for a patient in an experiment.
+                - Scenario: Represents a clinical scenario/event during the simulation.
+                - Experiment: Represents a full experiment configuration and metadata.
+                - Metric: Represents the computed metrics for a run, including error, time in target range,
+                    wobble, and divergence.
 ============================================================ 
 """
 

@@ -10,7 +10,7 @@ Description:   Batch table write and read operations.
 """
 
 import uuid
-from database.connection import transaction, execute, execute_one
+from core.src.database.connection import transaction, execute, execute_one
 
 
 def insert_batch(experiment_id, patient_id, raw_csv_path=None, batch_id=None):

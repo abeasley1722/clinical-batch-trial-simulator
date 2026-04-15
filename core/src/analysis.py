@@ -32,7 +32,7 @@ Usage:
 
 import numpy as np
 import pandas as pd
-from data_classes import Metric
+from core.src.data_classes import Metric
 
 def compute_wobble_divergence(times, measured_values, target_value):
     """

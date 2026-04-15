@@ -8,7 +8,7 @@ Description:   Patient table write and read operations.
 
 import json
 import uuid
-from database.connection import transaction, execute, execute_one
+from core.src.database.connection import transaction, execute, execute_one
 
 
 def insert_patient(sex=None, age=None, height=None,

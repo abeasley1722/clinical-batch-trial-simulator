@@ -13,15 +13,15 @@ Description:   Retrieval API for querying experiment results.
 """
 
 import pandas as pd
-from database.metric import (
+from core.src.database.metric import (
     get_runs_by_experiment,
     get_runs_by_controller,
     get_latest_run_per_controller,
     get_metrics_by_experiment,
     get_metrics_by_run,
 )
-from database.batch import get_batches_by_experiment
-from database.experiment import get_experiment
+from core.src.database.batch import get_batches_by_experiment
+from core.src.database.experiment import get_experiment
 
 
 def get_all_runs(experiment_id):

@@ -9,8 +9,8 @@ Description:   Run and Metric table write and read operations.
 """
 
 import uuid
-from database.connection import transaction, execute, execute_one
-from data_classes import Metric
+from core.src.database.connection import transaction, execute, execute_one
+from core.src.data_classes import Metric
 
 # ── Runs ──────────────────────────────────────────────────────────────────────
 

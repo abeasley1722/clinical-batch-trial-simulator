@@ -15,84 +15,30 @@ import requests as http_requests
 from datetime import datetime
 from pathlib import Path
 
-# === PATH SETUP (MUST be before importing local modules) ===
-# Navigate up from core/src/api to project root, then into pulse_engine
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
-PULSE_BIN = os.path.join(PULSE_HOME, "bin")
-PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
-
-sys.path.insert(0, PULSE_PYTHON)
-sys.path.insert(0, PULSE_BIN)
-os.add_dll_directory(PULSE_BIN)
-
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Blueprint
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
-#TODO: change if single patient functions are removed
-from ..main import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
-from ..controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
+from core.src.experiment_executor import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
+from core.src.controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
 
-#TODO: refactor using FastAPI instead of Flask
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+from core.src import socketio
 
-jobs = {}
-job_lock = threading.Lock()
-cancel_flags = {}  # job_id -> True if should cancel
-pulse_config_lock = threading.Lock()
+api_bp = Blueprint('api', __name__)
 
-# Use absolute paths so they work even after os.chdir()
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(SCRIPT_DIR, 'uploads')
-RESULTS_FOLDER = os.path.join(SCRIPT_DIR, 'results')
-Path(UPLOAD_FOLDER).mkdir(exist_ok=True)
-Path(RESULTS_FOLDER).mkdir(exist_ok=True)
-
-#TODO: refactor using FastAPI instead of Flask
-#TODO: figure out which functions can be removed if single patient functionality is removed
-
-@app.after_request
+@api_bp.after_request
 def add_no_cache_headers(response):
     """Prevent browser caching during development."""
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     return response
 
-@app.route('/')
-def serve_gui():
-    """Serve the GUI HTML file."""
-    gui_path = os.path.join(SCRIPT_DIR, 'pulse_gui.html')
-    
-    if not os.path.exists(gui_path):
-        return """
-        <html><body style="font-family: sans-serif; padding: 40px;">
-        <h1>Pulse Server Running</h1>
-        <p>API is available at <code>/api/</code></p>
-        <p>To use the GUI, place <code>pulse_gui.html</code> in the same directory as <code>pulse_server.py</code></p>
-        <p>Or open <code>pulse_gui.html</code> directly in a browser and connect to this server.</p>
-        </body></html>
-        """, 200
-    
-    # Read the GUI HTML
-    with open(gui_path, 'r', encoding='utf-8') as f:
-        html = f.read()
-    
-    # Auto-set the server URL to this server's address
-    # Replace the default localhost:8080 with empty string so it uses relative URLs
-    html = html.replace('value="http://localhost:8080"', 'value=""')
-    
-    return html
-
-
-@app.route('/api/available_variables')
+@api_bp.route('/api/available_variables')
 def api_available_variables():
     """Return the list of available CSV output variables for the GUI."""
     return jsonify(AVAILABLE_VARIABLES)
 
-@app.route('/api/test_http_controller', methods=['POST'])
+@api_bp.route('/api/test_http_controller', methods=['POST'])
 def test_http_controller():
     """Test connection to an HTTP controller."""
     data = request.json
@@ -158,7 +104,7 @@ batches = {}
 batch_lock = threading.Lock()
 batch_cancel_flags = {}  # batch_id -> True if should cancel (for thread-level check)
 
-@app.route('/api/submit_batch', methods=['POST'])
+@api_bp.route('/api/submit_batch', methods=['POST'])
 def submit_batch():
     batch = request.json
     batch_id = str(uuid.uuid4())[:8]
@@ -182,7 +128,7 @@ def submit_batch():
     return jsonify({'batch_id': batch_id})
 
 
-@app.route('/api/batch_status/<batch_id>')
+@api_bp.route('/api/batch_status/<batch_id>')
 def batch_status(batch_id):
     with batch_lock:
         if batch_id not in batches:
@@ -190,7 +136,7 @@ def batch_status(batch_id):
         return jsonify(batches[batch_id])
 
 
-@app.route('/api/cancel_batch/<batch_id>', methods=['POST'])
+@api_bp.route('/api/cancel_batch/<batch_id>', methods=['POST'])
 def cancel_batch(batch_id):
     """Cancel a running batch."""
     with batch_lock:
@@ -209,7 +155,7 @@ def cancel_batch(batch_id):
         return jsonify({'success': True, 'message': 'Cancellation requested'})
 
 
-@app.route('/api/download_batch/<batch_id>')
+@api_bp.route('/api/download_batch/<batch_id>')
 def download_batch(batch_id):
     with batch_lock:
         if batch_id not in batches:
@@ -221,7 +167,7 @@ def download_batch(batch_id):
 
     return send_file(batch_info['zip_path'], as_attachment=True)
 
-@app.route('/api/shutdown', methods=['POST'])
+@api_bp.route('/api/shutdown', methods=['POST'])
 def shutdown():
     os._exit(0)
 
