@@ -7,25 +7,16 @@ Description:    Main entrypoint for the Clinical Batch Trial Simulator server.
 ============================================================ 
 """
 
+import core.src.bootstrap
+
 import argparse
 import os
 import sys
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-PULSE_HOME = os.path.join(PROJECT_ROOT, "pulse_engine")
-PULSE_BIN = os.path.join(PULSE_HOME, "bin")
-PULSE_PYTHON = os.path.join(PULSE_HOME, "python")
-
-sys.path.insert(0, PULSE_PYTHON)
-sys.path.insert(0, PULSE_BIN)
-
-if sys.platform == "win32":
-    os.add_dll_directory(PULSE_BIN)
-
 from core.src import create_app, socketio
-from core.src.runtime_paths import PULSE_HOME
+from core.src.runtime_paths import PULSE_HOME, init_native_paths, init_runtime_dirs
 
+init_runtime_dirs()
 app = create_app()
 
 if __name__ == '__main__':

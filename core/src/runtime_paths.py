@@ -46,8 +46,8 @@ def init_runtime_dirs():
 
 
 def init_native_paths():
-    if not getattr(sys, "frozen", False):
-        sys.path.insert(0, str(PULSE_PYTHON))
-
+    pulse_python_str = str(PULSE_PYTHON)
+    if pulse_python_str not in sys.path:
+        sys.path.insert(0, pulse_python_str)
     if sys.platform == "win32":
         os.add_dll_directory(str(PULSE_BIN))

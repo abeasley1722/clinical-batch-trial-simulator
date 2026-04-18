@@ -22,6 +22,13 @@ from flask_socketio import SocketIO, emit
 from core.src.experiment_executor import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
 from core.src.controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
 
+# === DATABASE ROUTES ===
+from core.src.database.batch import get_batch, get_batches_by_experiment, get_batches_by_patient
+from core.src.database.experiment import get_experiment, get_all_experiments
+from core.src.database.metric import get_metrics_by_experiment
+from core.src.database.patient import get_patient, get_patients_by_cohort, get_all_patients
+from core.src.database.retrieval import get_metrics_dataframe, get_raw_csv_paths, get_raw_csv_dataframe
+
 from core.src import socketio
 
 api_bp = Blueprint('api', __name__)
@@ -179,3 +186,74 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     print(f"[WebSocket] Client disconnected")
+
+# === DATABASE ROUTES ===
+
+# --- Batch ---
+
+@api_bp.route('/api/batches/<batch_id>')
+def api_get_batch(batch_id):
+    result = get_batch(batch_id)
+    if result is None:
+        return jsonify({'error': 'Batch not found'}), 404
+    return jsonify(result)
+
+@api_bp.route('/api/batches/by_experiment/<experiment_id>')
+def api_get_batches_by_experiment(experiment_id):
+    return jsonify(get_batches_by_experiment(experiment_id))
+
+@api_bp.route('/api/batches/by_patient/<patient_id>')
+def api_get_batches_by_patient(patient_id):
+    return jsonify(get_batches_by_patient(patient_id))
+
+# --- Experiment ---
+
+@api_bp.route('/api/experiments')
+def api_get_all_experiments():
+    return jsonify(get_all_experiments())
+
+@api_bp.route('/api/experiments/<experiment_id>')
+def api_get_experiment(experiment_id):
+    result = get_experiment(experiment_id)
+    if result is None:
+        return jsonify({'error': 'Experiment not found'}), 404
+    return jsonify(result)
+
+# --- Metrics ---
+
+@api_bp.route('/api/metrics/by_experiment/<experiment_id>')
+def api_get_metrics_by_experiment(experiment_id):
+    return jsonify(get_metrics_by_experiment(experiment_id))
+
+# --- Patient ---
+
+@api_bp.route('/api/patients')
+def api_get_all_patients():
+    return jsonify(get_all_patients())
+
+@api_bp.route('/api/patients/<patient_id>')
+def api_get_patient(patient_id):
+    result = get_patient(patient_id)
+    if result is None:
+        return jsonify({'error': 'Patient not found'}), 404
+    return jsonify(result)
+
+@api_bp.route('/api/patients/by_cohort/<cohort_id>')
+def api_get_patients_by_cohort(cohort_id):
+    return jsonify(get_patients_by_cohort(cohort_id))
+
+# --- Retrieval ---
+
+@api_bp.route('/api/retrieval/metrics/<experiment_id>')
+def api_get_metrics_dataframe(experiment_id):
+    df = get_metrics_dataframe(experiment_id)
+    return jsonify(df.to_dict(orient='records'))
+
+@api_bp.route('/api/retrieval/raw_csv_paths/<experiment_id>')
+def api_get_raw_csv_paths(experiment_id):
+    return jsonify(get_raw_csv_paths(experiment_id))
+
+@api_bp.route('/api/retrieval/raw_csv/<experiment_id>')
+def api_get_raw_csv_dataframe(experiment_id):
+    df = get_raw_csv_dataframe(experiment_id)
+    return jsonify(df.to_dict(orient='records'))
