@@ -92,6 +92,7 @@ def get_patients_by_demographic(group, count=None):
         sql = """
             SELECT p.* FROM patients p
             WHERE p.demographic_group = ?
+            ORDER BY RANDOM()
             LIMIT ?
         """
         rows = execute(sql, (group, count))

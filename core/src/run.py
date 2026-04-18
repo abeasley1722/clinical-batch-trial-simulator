@@ -50,7 +50,7 @@ if __name__ == '__main__':
     batch_id = f"{timestamp}_{id}"
     run_batch_thread(batch_id, {
         'name': 'Test Batch',
-        'patient_count' : 16,
+        'patient_count' : 8,
         'demographics': [
         {'name': 'soldier', 'percent': 50},
         {'name': 'adult', 'percent': 50}

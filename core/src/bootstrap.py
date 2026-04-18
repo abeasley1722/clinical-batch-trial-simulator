@@ -1,3 +1,11 @@
+""" 
+============================================================
+Author:         Zachary Kao
+Date Created:   2026-04-18
+Description:    Bootstrap to initialize Pulse paths
+============================================================ 
+"""
+
 import sys
 import os
 from pathlib import Path
