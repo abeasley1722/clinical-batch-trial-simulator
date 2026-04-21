@@ -10,3 +10,22 @@ export const useCounterStore = defineStore('counter', () => {
 
   return { count, doubleCount, increment }
 })
+
+// export const useExperimentStore = defineStore('experiments', {
+//   state: () => ({
+//     experiments: [],
+//     loaded: false
+//   }),
+
+//   actions: {
+//     async fetchExperiments() {
+//       const res = await api.get('/experiments') // Fetch the endpoint for experiments
+//       this.experiments = res.data
+//       this.loaded = true
+//     },
+
+//     addExperiment(exp) {
+//       this.experiments.push(exp)
+//     }
+//   }
+// })

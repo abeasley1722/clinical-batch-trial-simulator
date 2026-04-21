@@ -4,82 +4,95 @@ import HelloWorld from './components/HelloWorld.vue'
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <h3>My App</h3>
+  </div>
 
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
+  <!-- Sidebar //Note: Create a settings page-->
+  <div class="sidebar">
+    <nav>
+      <RouterLink to="/dashboard">⊞</RouterLink>
+      <RouterLink to="/about">⚙</RouterLink> 
+    </nav>
+  </div>
 
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
-    </div>
-  </header>
-
-  <RouterView />
+  <!-- Main Content -->
+  <div class="main-content">
+    <RouterView />
+  </div>
 </template>
 
+
 <style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-nav {
+/*Top Bar*/
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
+  height: 60px;
+  background-color: #2c3e50;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding-left: 20px;
+  z-index: 1000;
 }
 
-nav a.router-link-exact-active {
-  color: var(--color-text);
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 60px; /* below top bar */
+  left: 0;
+  width: 70px;
+  height: calc(100vh - 60px);
+  background-color: #34495e;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px;
 }
 
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
+/* Nav links */
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+  margin-top: auto; 
 }
 
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
+.sidebar a {
+  color: white;
+  text-decoration: none;
 }
 
-nav a:first-of-type {
-  border: 0;
+.sidebar a.router-link-exact-active {
+  font-weight: bold;
 }
 
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
+/* Bottom buttons */
+.bottom-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
-  .logo {
-    margin: 0 2rem 0 0;
-  }
+.bottom-buttons button {
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  background-color: #1abc9c;
+  color: white;
+  border-radius: 5px;
+}
 
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
 
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
+.main-content {
+  margin-left: 70px;
+  margin-top: 60px;
+  height: calc(100vh - 60px);
 }
 </style>

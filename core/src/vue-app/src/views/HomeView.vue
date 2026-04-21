@@ -1,9 +1,16 @@
+<!-- src/views/HomeView.vue -->
 <script setup>
-import TheWelcome from '../components/TheWelcome.vue'
+import VitalsDashboard from '@/components/VitalsDashboard.vue'
 </script>
 
 <template>
-  <main>
-    <TheWelcome />
+  <main class="home-view">
+    <VitalsDashboard />
   </main>
 </template>
+
+<style scoped>
+.home-view {
+  height: 100vh;
+}
+</style>

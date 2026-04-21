@@ -24,6 +24,8 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 ```sh
 npm install
 ```
+# Install highcharts
+npm install highcharts highcharts-vue
 
 ### Compile and Hot-Reload for Development
 
@@ -42,3 +44,4 @@ npm run build
 ```sh
 npm run test:unit
 ```
+
