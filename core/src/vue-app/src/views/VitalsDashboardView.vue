@@ -1,5 +1,5 @@
 <script setup>
-import VitalsDashboard from '@/components/dashboard/VitalsDashboard.vue'
+import VitalsDashboard from '@/components/MockVitalsDashboard.vue'
 </script>
 
 <template>
