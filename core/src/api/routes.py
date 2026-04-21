@@ -114,11 +114,11 @@ batch_cancel_flags = {}  # batch_id -> True if should cancel (for thread-level c
 @api_bp.route('/api/submit_batch', methods=['POST'])
 def submit_batch():
     batch = request.json
-    batch_id = str(uuid.uuid4())[:8]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    id = str(uuid.uuid4())[:8]
+    batch_id = f"{timestamp}_{id}"
     
     print(f"[BATCH] Received batch submission: {batch_id}")
-    print(f"[BATCH] Patients: {batch.get('patients', [])}")
-    print(f"[BATCH] Custom patients: {len(batch.get('custom_patients', []))}")
     
     with batch_lock:
         batches[batch_id] = {
