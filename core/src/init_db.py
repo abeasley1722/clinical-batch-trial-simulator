@@ -11,8 +11,9 @@ Usage:
 ============================================================
 """
 
-from core.src.database.connection import get_connection, DB_PATH
-from core.src.database.schema import ALL_TABLES
+from database.connection import get_connection, DB_PATH
+from database.schema import ALL_TABLES
+
 
 def init_db():
     print(f"Initializing database at: {DB_PATH}")

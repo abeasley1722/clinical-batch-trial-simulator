@@ -9,8 +9,8 @@ Description:   Run and Metric table write and read operations.
 """
 
 import uuid
-from core.src.database.connection import transaction, execute, execute_one
-from core.src.data_classes import Metric
+from database.connection import transaction, execute, execute_one
+
 
 # ── Runs ──────────────────────────────────────────────────────────────────────
 
@@ -73,39 +73,49 @@ def get_latest_run_per_controller(experiment_id):
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
-def insert_metric(experiment_id, vital_sign=None, mae=None, median=None,
-                  std_dev=None, time_within_target_range=None, percent_time_within_target_range=None,
-                  wobble=None, divergence=None,
-                  matching_function=None, matching_function_mae=None, metric_id=None):
-    """Insert a metric record after a run completes. Returns the metric_id."""
+def insert_metric(experiment_id, run_id=None, mean_absolute_error=None,
+                  controller_start_time=None, mean=None, std_dev=None,
+                  time_within_target_range=None,
+                  percent_time_within_target_range=None,
+                  wobble=None, divergence=None, metric_id=None):
+    """
+    Insert a metric record after a run completes. Returns the metric_id.
+
+    Usage with Metric dataclass:
+        from data_classes import Metric
+        from analysis import compute_wobble_divergence
+        m = Metric(experiment_id=..., mean_absolute_error=2.5, ...)
+        wobble, divergence = compute_wobble_divergence(times, measured, target)
+        insert_metric(
+            experiment_id=m.experiment_id,
+            run_id=run_id,
+            mean_absolute_error=m.mean_absolute_error,
+            controller_start_time=m.controller_start_time,
+            mean=m.mean,
+            std_dev=m.std_dev,
+            time_within_target_range=m.time_within_target_range,
+            percent_time_within_target_range=m.percent_time_within_target_range,
+            wobble=wobble,
+            divergence=divergence
+        )
+    """
     mid = metric_id or str(uuid.uuid4())
 
     with transaction() as conn:
         conn.execute("""
             INSERT INTO metrics
-                (metric_id, experiment_id, vital_sign, mae, median,
-                 std_dev, time_within_target_range, percent_time_within_target_range, wobble, divergence, matching_function, matching_function_mae)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (mid, experiment_id, vital_sign, mae, median, std_dev,
-              time_within_target_range, percent_time_within_target_range, wobble, divergence, matching_function, matching_function_mae))
+                (metric_id, experiment_id, run_id, mean_absolute_error,
+                 controller_start_time, mean, std_dev,
+                 time_within_target_range, percent_time_within_target_range,
+                 wobble, divergence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (mid, experiment_id, run_id, mean_absolute_error,
+              controller_start_time, mean, std_dev,
+              time_within_target_range, percent_time_within_target_range,
+              wobble, divergence))
 
     return mid
 
-def insert_metric_from_object(metric: Metric):
-    """Helper to insert a Metric dataclass instance."""
-    return insert_metric(
-        experiment_id=metric.experiment_id,
-        vital_sign=metric.vital_sign_measured,
-        mae=metric.mean_absolute_error,
-        median=metric.mean,
-        std_dev=metric.std_dev,
-        time_within_target_range=metric.time_within_target_range,
-        percent_time_within_target_range=metric.percent_time_within_target_range,
-        wobble=metric.wobble,
-        divergence=metric.divergence,
-        matching_function=metric.matching_function,
-        matching_function_mae=metric.matching_function_mae
-    )
 
 def get_metrics_by_experiment(experiment_id):
     """Fetch all metrics for an experiment. Returns a list of dicts."""
