@@ -1,18 +1,4 @@
 """
-============================================================
-Author:         Zachary Kao / Jared Garcia
-Date Created:   2026-03-12
-Description:    Shared dataclasses used across the project.
-                Includes Patient, Batch, Scenario, Metric, Experiment.
-============================================================
-"""
-
-from __future__ import annotations
-import uuid
-import json
-from dataclasses import dataclass, asdict, field
-
-
 @dataclass
 class Patient:
     patient_id: str
