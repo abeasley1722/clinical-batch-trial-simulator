@@ -609,16 +609,8 @@ def run_single_patient(args):
         event_handler = BatchEventHandler()
         pulse.set_event_handler(event_handler)
         
-        # Build data requests dynamically from selected output columns
-        avail_vars = batch_config.get('available_variables', [])
-        output_columns = batch_config.get('output_columns')
-        if output_columns is not None and avail_vars:
-            selected_set = set(output_columns)
-            selected_vars = [v for v in avail_vars if v['key'] in selected_set]
-        elif avail_vars:
-            selected_vars = [v for v in avail_vars if v.get('default')]
-        else:
-            selected_vars = []
+        # Build data requests using ALL available variables
+        selected_vars = batch_config.get('available_variables', [])
 
         # Unit string -> Pulse unit object mapping (needed in worker process)
         worker_unit_map = {
@@ -2122,21 +2114,17 @@ def run_batch_thread(batch_id, batch):
     for path in completed_csv_paths:
         df = pd.read_csv(path)
 
-        #keep only timestamp and user selected columns
-        cols_to_keep = ['sim_time_s'] + [c for c in experiment.output_columns if c in df.columns]
-        df = df[cols_to_keep]
-
         #round timestamps to nearest millisecond
         df['sim_time_s'] = df['sim_time_s'].round(3)
 
-    dfs.append(df)
+        dfs.append(df)
 
     #concatenate all dataframes into one
     all_data = pd.DataFrame()
     if dfs:
         all_data = pd.concat(dfs, ignore_index=True)
 
-    mean_df = all_data.groupby('sim_time_s').mean().reset_index()
+    mean_df = all_data.groupby('sim_time_s').mean(numeric_only=True).reset_index()
 
     #save mean csv to database and filesystem
     mean_df.to_csv(str(ANALYSIS_RESULTS_FOLDER / f"batch_{batch_id}_mean.csv"),index=False)
