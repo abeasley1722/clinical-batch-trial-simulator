@@ -1,0 +1,15 @@
+@import './base.css';
+
+html, body, #app {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Remove ALL demo layout constraints */
+#app {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}

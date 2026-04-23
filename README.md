@@ -39,4 +39,13 @@ ls | grep -i pypulse
 - source ~/Pulse/engine/.venv/bin/activate
 - export PYTHONPATH=~/Pulse/builds/release/install/bin:$PYTHONPATH
 - python -c "import PyPulse; print('PyPulse import OK')"
+
+
+## Frontend Installation
+Requirements:
+- Node.js 20+
+- Download Node.js LTS version
+- Add to systems PATH
+- Install Vue: npm create vite@latest
+- 
   
