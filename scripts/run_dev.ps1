@@ -22,6 +22,8 @@ Set-Location $PROJECT_ROOT
 # figure out where Pulse is installed — check a custom path first, then look in the usual spots
 if ($env:PULSE_ENGINE_PATH) {
     $PULSE_HOME = $env:PULSE_ENGINE_PATH
+} elseif (Test-Path (Join-Path $PROJECT_ROOT "\pulse_engine")) {
+    $PULSE_HOME = Join-Path $PROJECT_ROOT "\pulse_engine"
 } elseif (Test-Path (Join-Path $PROJECT_ROOT "core\src\pulse_engine")) {
     $PULSE_HOME = Join-Path $PROJECT_ROOT "core\src\pulse_engine"
 } elseif (Test-Path "$env:USERPROFILE\Pulse\builds\release\install") {

@@ -12,7 +12,6 @@
 #      If main.py is updated to rely on PYTHONPATH instead, remove its
 #      hardcoded path setup to avoid conflicts.
 #   3. ./scripts/run_dev.sh
-#   4. if needed we can delete this one
 # ============================================================
 set -e
 
@@ -25,13 +24,13 @@ cd "$PROJECT_ROOT"
 # figure out where Pulse is installed — check a custom path first, then look in the usual spots
 if [ -n "$PULSE_ENGINE_PATH" ]; then
     PULSE_HOME="$PULSE_ENGINE_PATH"
-elif [ -d "$PROJECT_ROOT/core/src/pulse_engine" ]; then
-    PULSE_HOME="$PROJECT_ROOT/core/src/pulse_engine"
+elif [ -d "$PROJECT_ROOT/pulse_engine" ]; then
+    PULSE_HOME="$PROJECT_ROOT/pulse_engine"
 elif [ -d "$HOME/Pulse/builds/release/install" ]; then
     PULSE_HOME="$HOME/Pulse/builds/release/install"
 else
     echo "ERROR: Pulse engine not found."
-    echo "  Either place it at: $PROJECT_ROOT/core/src/pulse_engine"
+    echo "  Either place it at: $PROJECT_ROOT/pulse_engine"
     echo "  Or set PULSE_ENGINE_PATH to its location."
     exit 1
 fi
