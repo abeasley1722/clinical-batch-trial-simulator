@@ -21,7 +21,7 @@ export const api = {
   },
 
   runSimulation(payload) {
-    return request('/api/run', {
+    return request('/api/submit_batch', {
       method: 'POST',
       body: JSON.stringify(payload)
     })

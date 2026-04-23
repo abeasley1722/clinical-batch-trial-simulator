@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 
-export const useExperimentDashboardStore = defineStore('experimentDashboard', {
+export const useMockExperimentDashboardStore = defineStore('experimentDashboard', {
   state: () => ({
     // ------------------------
     // UI STATE

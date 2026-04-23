@@ -14,7 +14,7 @@ import {
   MarkLineComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { useExperimentDashboardStore } from '../stores/mockExperimentDashboardStore'
+import { useMockExperimentDashboardStore } from '../stores/mockExperimentDashboardStore'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -30,7 +30,7 @@ use([
   MarkLineComponent
 ])
 
-const store = useExperimentDashboardStore()
+const store = useMockExperimentDashboardStore()
 
 onMounted(() => {
   store.initialize()
