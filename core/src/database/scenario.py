@@ -7,7 +7,7 @@ Description:   Scenario table write and read operations.
 """
 
 import uuid
-from core.src.database.connection import transaction, execute, execute_one
+from database.connection import transaction, execute, execute_one
 
 
 def insert_scenario(experiment_id, scenario_type=None, scenario_time=None,

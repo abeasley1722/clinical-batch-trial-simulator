@@ -9,13 +9,21 @@ Description:   Reusable SQLite connection and helper module.
 
 import sqlite3
 import os
-from pathlib import Path
 from contextlib import contextmanager
-from core.src.runtime_paths import APP_DATA_DIR  
 
-DB_PATH = Path(
-    os.environ.get("DB_PATH", APP_DATA_DIR / "simulator.db")
+# DB path — use env var or default to data/simulator.db at project root
+_DEFAULT_DB_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "data", "simulator.db"
 )
+DB_PATH = os.environ.get("DB_PATH", os.path.normpath(_DEFAULT_DB_PATH))
+
+# Results directory — folder where all experiment CSV outputs are stored
+# Override by setting RESULTS_DIR in your .env or environment
+_DEFAULT_RESULTS_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "results"
+)
+RESULTS_DIR = os.environ.get("RESULTS_DIR", os.path.normpath(_DEFAULT_RESULTS_DIR))
+
 
 def get_connection():
     """Open a connection to the SQLite DB with foreign keys enabled."""
