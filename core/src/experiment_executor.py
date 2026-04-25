@@ -44,13 +44,10 @@ from core.src.vital_ranges import SOLDIER, ADULT, Demographic
 from core.src.analysis import compute_wobble_divergence
 from core.src.data_classes import Experiment, Patient, Scenario, Metric
 
-from core.src.init_db import init_db
 from core.src.database.patient import get_patients_by_demographic
 from core.src.database.batch import insert_batch
 from core.src.database.metric import insert_metric, insert_metric_from_object, insert_run
 from core.src.database.experiment import insert_experiment_from_object, update_experiment_from_object
-
-init_db()  # Ensure DB is initialized
 
 # === PULSE IMPORTS ===
 from pulse.engine.PulseEngine import PulseEngine, eModelType
