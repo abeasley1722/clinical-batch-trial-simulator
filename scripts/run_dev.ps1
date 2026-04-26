@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PROJECT_ROOT = Split-Path -Parent $SCRIPT_DIR
-$ENTRYPOINT = Join-Path $PROJECT_ROOT "core\src\main.py"
+$ENTRYPOINT = Join-Path $PROJECT_ROOT "core\src\run.py"
 
 Set-Location $PROJECT_ROOT
 

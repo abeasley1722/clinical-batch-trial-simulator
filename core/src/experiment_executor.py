@@ -1835,8 +1835,8 @@ def run_batch_thread(batch_id, batch):
             'patients': {},
             'created_at': datetime.now().isoformat(),
             'started_at': datetime.now().isoformat(),
-            'completed_count': 0,
-            'total_count': 0,
+            'completed_jobs': 0,
+            'total_jobs': 0,
             'batch_dir': None,
             'zip_path': None,
         }
@@ -1937,7 +1937,7 @@ def run_batch_thread(batch_id, batch):
 
     workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
     total_jobs = len(patients)
-    
+
     if len(patients) == 0:
         with batch_lock:
             batches[batch_id]['status'] = 'error'
@@ -1951,9 +1951,9 @@ def run_batch_thread(batch_id, batch):
 
     # Initialize job progress tracking (patient x replicate combinations)
     with batch_lock:
-        #batches[batch_id]['replicates'] = replicates
         batches[batch_id]['patient_count'] = len(patients)
         batches[batch_id]['total_jobs'] = len(patients)
+        batches[batch_id]['batch_dir'] = batch_dir
 
         for p in patients:
             patient_name = p['name'] if isinstance(p, dict) else p
@@ -2001,7 +2001,7 @@ def run_batch_thread(batch_id, batch):
             patient_args.append((p, config, batch_dir, job_id))
 
         # Run with ProcessPool using apply_async for non-blocking cancellation support
-        print(f"Starting batch {batch_id} with {workers} workers for {total_jobs} jobs")
+        print(f"\nStarting batch {batch_id} with {workers} workers for {total_jobs} jobs")
 
         csv_paths = {}
         completed = 0
@@ -2046,6 +2046,7 @@ def run_batch_thread(batch_id, batch):
                         with batch_lock:
                             if job_id in batches[batch_id]['patients']:
                                 batches[batch_id]['patients'][job_id]['status'] = status
+                                batches[batch_id]['completed_jobs'] += 1
                                 if status == 'complete':
                                     batches[batch_id]['patients'][job_id]['csv_path'] = result['csv_path']
                                     batches[batch_id]['patients'][job_id]['sim_time'] = result['duration']
