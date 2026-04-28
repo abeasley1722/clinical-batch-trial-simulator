@@ -11,6 +11,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     experiments: [],
     selectedExperimentId: null,
     selectedBatchId: null,
+
     selectedVitalKeys: [],
     selectedGraphType: 'line',
 
@@ -37,7 +38,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       }))
     },
 
-    // 🔥 FIXED: numeric-only + correct time key
+    // ✅ only numeric vitals
     availableVitals(state) {
       if (!state.rawData?.length) return []
 
@@ -50,14 +51,12 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
         }))
     },
 
-    // 🔥 FIXED: correct time axis
     chartXAxisLabels(state) {
       if (!state.rawData?.length) return []
-
       return state.rawData.map(row => row.sim_time_s)
     },
 
-    // 🔥 FIXED: safe + numeric filtering
+    // 🔥 FIXED: now includes target_value
     chartSeries(state) {
       if (!state.rawData?.length) return []
 
@@ -67,12 +66,24 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
             .filter(k => k !== 'sim_time_s')
             .filter(k => typeof state.rawData[0][k] === 'number')
 
-      return keys.map(key => ({
-        name: key.toUpperCase(),
-        data: state.rawData.map(row => row[key] ?? null),
-        unit: '',
-        target: null
-      }))
+      return keys.map(key => {
+        // 🔥 MATCH METRIC TO VITAL
+        const metric = state.metrics.find(
+          m => m.vital_sign === key
+        )
+
+        return {
+          name: key.toUpperCase(),
+          data: state.rawData.map(row => row[key] ?? null),
+          unit: '',
+
+          // 🔥 THIS IS THE FIX
+          target: metric ? Number(metric.target_value) : null,
+
+          // optional (if you later store tolerance in metrics)
+          tolerance: metric?.tolerance ?? null
+        }
+      })
     }
   },
 
@@ -81,7 +92,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       await this.loadExperiments()
 
       if (this.experiments.length) {
-       await this.selectExperiment(this.experiments[0].experiment_id)
+        await this.selectExperiment(this.experiments[0].experiment_id)
       }
     },
 
@@ -104,14 +115,22 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     },
 
     async loadMetrics(experimentId) {
-      this.metrics = await getMetricsByExperiment(experimentId)
+      const data = await getMetricsByExperiment(experimentId)
+
+      // 🔥 SAFETY: ensure numbers (prevents bytes/strings issues)
+      this.metrics = (data || []).map(m => ({
+        ...m,
+        target_value:
+          m.target_value !== null && m.target_value !== undefined
+            ? Number(m.target_value)
+            : null
+      }))
     },
 
     async loadBatches(experimentId) {
       this.batches = await getBatchesByExperiment(experimentId)
     },
 
-    // 🔥 FIXED: sorted CSV
     async loadRawCSV(experimentId) {
       const data = await getRawCSVData(experimentId)
 
@@ -122,7 +141,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
 
       // ensure proper ordering
       data.sort((a, b) => a.sim_time_s - b.sim_time_s)
-      console.log('Loaded raw CSV data:', data)
+
       this.rawData = data
     },
 

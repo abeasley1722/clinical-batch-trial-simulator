@@ -19,7 +19,7 @@ const totalPercent = computed(() =>
 
 const isValid = computed(() => totalPercent.value === 100)
 
-// 🔥 NEW: breakdown
+// 🔥 Breakdown
 const patientBreakdown = computed(() =>
   store.demographics.map(d => ({
     name: d.name,
@@ -30,15 +30,21 @@ const patientBreakdown = computed(() =>
 </script>
 
 <template>
-  <div class="card">
-    <h2>Patient Demographics</h2>
+  <div class="panel">
+    <h3 class="title">Patient Demographics</h3>
 
-    <!-- 🔥 Total Patients -->
-    <h3>Total Patients</h3>
-    <input type="number" v-model.number="store.patientCount" min="1" />
+    <!-- Total Patients -->
+    <div class="section">
+      <div class="label">Total Patients</div>
+      <input type="number" v-model.number="store.patientCount" min="1" />
+    </div>
 
-    <!-- 🔥 Demographics -->
-    <div v-for="(demo, i) in store.demographics" :key="i" class="row">
+    <!-- Demographics -->
+    <div
+      v-for="(demo, i) in store.demographics"
+      :key="i"
+      class="row"
+    >
       <select v-model="demo.name">
         <option disabled value="">Select Patient</option>
         <option v-for="p in patients" :key="p" :value="p">
@@ -48,47 +54,157 @@ const patientBreakdown = computed(() =>
 
       <input type="number" v-model.number="demo.percent" placeholder="%" />
 
-      <button @click="store.removeDemographic(i)">❌</button>
+      <button class="icon-btn" @click="store.removeDemographic(i)">
+        ✖
+      </button>
     </div>
 
-    <button @click="store.addDemographic()">+ Add Demographic</button>
+    <button class="exp-btn add-btn" @click="store.addDemographic()">
+      + Add Demographic
+    </button>
 
-    <!-- 🔥 Validation -->
-    <p :class="{ error: !isValid }">
-      Total: {{ totalPercent }}%
-    </p>
-
-    <p v-if="!isValid" class="error">
-      Percent must equal 100%
-    </p>
-
-    <!-- 🔥 Breakdown -->
-    <h4>Breakdown</h4>
-
-    <div v-for="p in patientBreakdown" :key="p.name">
-      <span v-if="p.name">
-        {{ p.name }}: {{ p.count }} patients ({{ p.percent }}%)
+    <!-- Validation -->
+    <div class="validation">
+      <span :class="{ error: !isValid }">
+        Total: {{ totalPercent }}%
       </span>
+
+      <span v-if="!isValid" class="error">
+        Must equal 100%
+      </span>
+    </div>
+
+    <!-- Breakdown -->
+    <div class="section">
+      <div class="label">Breakdown</div>
+
+      <div v-for="p in patientBreakdown" :key="p.name" class="breakdown-row">
+        <span v-if="p.name">
+          {{ p.name }} → {{ p.count }} patients ({{ p.percent }}%)
+        </span>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.card {
-  background: #222;
-  padding: 20px;
-  border-radius: 10px;
+/* ========================
+   PANEL
+======================== */
+.panel {
+  background: #1a1a1a;
   color: white;
+  padding: 15px;
+  border-radius: 12px;
 }
 
+/* ========================
+   TITLES
+======================== */
+.title {
+  margin-bottom: 10px;
+}
+
+.label {
+  color: #bbb;
+  margin-bottom: 5px;
+}
+
+/* ========================
+   SECTIONS
+======================== */
+.section {
+  margin-bottom: 15px;
+}
+
+/* ========================
+   ROWS
+======================== */
 .row {
   display: flex;
   gap: 10px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+/* ========================
+   INPUTS
+======================== */
+input,
+select {
+  background: #333;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: white;
+  outline: none;
+}
+
+input::placeholder {
+  color: #bbb;
+}
+
+/* ========================
+   BUTTONS
+======================== */
+.exp-btn {
+  padding: 8px 14px;
+  background: #333;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.exp-btn:hover {
+  background: #444;
+}
+
+.exp-btn:active {
+  background: #222;
+}
+
+.add-btn {
+  margin-bottom: 10px;
+}
+
+/* ========================
+   ICON BUTTON
+======================== */
+.icon-btn {
+  background: #333;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #555;
+}
+
+/* ========================
+   VALIDATION
+======================== */
+.validation {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
 .error {
-  color: red;
-  font-weight: bold;
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+/* ========================
+   BREAKDOWN
+======================== */
+.breakdown-row {
+  color: #bbb;
+  margin-bottom: 5px;
 }
 </style>

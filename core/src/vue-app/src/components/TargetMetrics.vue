@@ -16,44 +16,36 @@ const availableMetrics = [
 
 const selectedMetric = ref(null)
 
-// ✅ safer filtering
 const filteredMetrics = computed(() =>
   availableMetrics.filter(m => !(m.key in store.targetMetrics))
 )
 
-// 🔥 helper to get label
 function getLabel(key) {
   return availableMetrics.find(m => m.key === key)?.label || key
 }
 
 function addMetric() {
   if (!selectedMetric.value) return
-
   store.addTargetMetric(selectedMetric.value)
-
-  selectedMetric.value = null // ✅ proper reset
+  selectedMetric.value = null
 }
 </script>
 
 <template>
-  <div class="card">
-    <h2>Target Metrics</h2>
+  <div class="panel">
+    <h3 class="title">Target Metrics</h3>
 
     <!-- ➕ Add Metric -->
-    <div class="add-row">
+    <div class="row">
       <select v-model="selectedMetric">
         <option :value="null" disabled>Select Metric</option>
-
-        <option
-          v-for="m in filteredMetrics"
-          :key="m.key"
-          :value="m.key"
-        >
+        <option v-for="m in filteredMetrics" :key="m.key" :value="m.key">
           {{ m.label }}
         </option>
       </select>
 
       <button
+        class="exp-btn"
         @click="addMetric"
         :disabled="!selectedMetric"
       >
@@ -61,19 +53,20 @@ function addMetric() {
       </button>
     </div>
 
-    <!-- 🔥 Empty state -->
-    <p v-if="filteredMetrics.length === 0" class="info">
+    <!-- Empty -->
+    <p v-if="filteredMetrics.length === 0" class="muted">
       All metrics added
     </p>
 
-    <!-- 🔥 Selected Metrics -->
+    <!-- Selected Metrics -->
     <div
       v-for="(metric, key) in store.targetMetrics"
       :key="key"
       class="metric-row"
     >
-      <!-- ✅ label instead of raw key -->
-      <h3>{{ getLabel(key) }}</h3>
+      <div class="metric-label">
+        {{ getLabel(key) }}
+      </div>
 
       <input
         type="number"
@@ -93,23 +86,44 @@ function addMetric() {
         placeholder="Match Function"
       />
 
-      <button @click="store.removeTargetMetric(key)">❌</button>
+      <button class="icon-btn" @click="store.removeTargetMetric(key)">
+        ✖
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.card {
-  background: #222;
+/* ========================
+   PANEL (MATCH DASHBOARD)
+======================== */
+.panel {
+  background: #1a1a1a;
   color: white;
-  padding: 20px;
-  border-radius: 10px;
+  padding: 15px;
+  border-radius: 12px;
 }
 
-.add-row {
+/* ========================
+   TITLES
+======================== */
+.title {
+  margin-bottom: 10px;
+}
+
+.muted {
+  color: #bbb;
+  margin-bottom: 10px;
+}
+
+/* ========================
+   ROWS
+======================== */
+.row {
   display: flex;
   gap: 10px;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .metric-row {
@@ -117,10 +131,71 @@ function addMetric() {
   gap: 10px;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
-.info {
-  color: #aaa;
-  margin-bottom: 10px;
+.metric-label {
+  min-width: 150px;
+  color: #bbb;
+  font-weight: 500;
+}
+
+/* ========================
+   INPUTS
+======================== */
+input,
+select {
+  background: #333;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: white;
+  outline: none;
+}
+
+input::placeholder {
+  color: #bbb;
+}
+
+/* ========================
+   BUTTONS (MATCH exp-btn)
+======================== */
+.exp-btn {
+  padding: 8px 14px;
+  background: #333;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.exp-btn:hover {
+  background: #444;
+}
+
+.exp-btn:active {
+  background: #222;
+}
+
+.exp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========================
+   ICON BUTTON
+======================== */
+.icon-btn {
+  background: #333;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #555;
 }
 </style>

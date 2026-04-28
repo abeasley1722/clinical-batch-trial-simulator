@@ -143,7 +143,7 @@ export const useSimulationStore = defineStore('simulation', {
         this.status = 'submitting'
 
         const payload = this.buildPayload()
-        console.log('SENDING:', payload)
+        console.log('SENDING:\n', JSON.stringify(payload, null, 2))
 
         const res = await runSimulation(payload)
 

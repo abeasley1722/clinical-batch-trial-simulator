@@ -31,7 +31,7 @@ ANALYSIS_RESULTS_DIR = APP_DATA_DIR / "analysis_results"
 # -----------------------------
 # External engine (pulse_engine)
 # -----------------------------
-PULSE_HOME = BASE_DIR / "pulse_engine"
+PULSE_HOME = Path("/mnt/c/Users/badas/Pulse/builds/debug/install")
 PULSE_BIN = PULSE_HOME / "bin"
 PULSE_PYTHON = PULSE_HOME / "python"
 

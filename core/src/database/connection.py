@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from core.src.runtime_paths import APP_DATA_DIR  
 
 DB_PATH = Path(
-    os.environ.get("DB_PATH", APP_DATA_DIR / "simulator.db")
+    os.environ.get("DB_PATH", APP_DATA_DIR / "b")
 )
 
 def get_connection():

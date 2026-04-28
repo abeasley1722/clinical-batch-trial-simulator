@@ -39,24 +39,25 @@ onMounted(() => {
 const {
   experiments,
   selectedExperimentId,
-  selectedExperimentIds,
-  compareMode,
-  selectedGraphType,
-  selectedBatchId,
-  selectedVitalKeys
+  selectedGraphType
 } = storeToRefs(store)
 
 // ✅ SAFE COMPUTEDS
 const hasExperiments = computed(() => (store.experiments || []).length > 0)
 const selectedExperiment = computed(() => store.selectedExperiment || {})
 const selectedExperimentMetrics = computed(() => store.selectedExperimentMetrics || [])
-const selectedExperimentTargets = computed(() => store.selectedExperimentTargets || [])
-const graphTypeOptions = computed(() => store.graphTypeOptions || [])
 const availableBatches = computed(() => store.availableBatches || [])
 const availableVitals = computed(() => store.availableVitals || [])
 const chartSeries = computed(() => store.chartSeries || [])
 const chartXAxisLabels = computed(() => store.chartXAxisLabels || [])
-const comparisonCharts = computed(() => store.comparisonCharts || [])
+
+// 🔥 DERIVE TARGETS FROM METRICS
+const derivedTargets = computed(() =>
+  selectedExperimentMetrics.value.map(m => ({
+    target_name: m.vital_sign,
+    target_value: m.target_value
+  }))
+)
 
 // ========================
 // HELPERS
@@ -74,7 +75,7 @@ function makeChartOptions(title, xAxisLabels = [], series = [], graphType) {
   return {
     title: { text: title },
     tooltip: { trigger: 'axis' },
-    legend: { top: 28 },
+    legend: { show: false },
     grid: { left: 56, right: 24, top: 88, bottom: 90 },
     dataZoom: [
       { type: 'inside', start: 0, end: 100 },
@@ -89,16 +90,27 @@ function makeChartOptions(title, xAxisLabels = [], series = [], graphType) {
       type: 'value',
       scale: true
     },
+
+    // 🔥 GLOBAL TARGET LINES
+    yAxis: {
+      type: 'value',
+      scale: true,
+      splitLine: { show: true },
+      axisLine: { show: true }
+    },
+
     series: (series || []).map((item) => ({
       name: item.name,
       type: graphType,
       data: item.data || [],
-      markLine: item.target
+
+      // 🔥 FIXED TARGET LINE
+      markLine: item.target !== null && item.target !== undefined
         ? {
             symbol: ['none', 'none'],
             silent: true,
-            lineStyle: { type: 'dashed' },
-            data: [{ yAxis: Number(item.target.target_value) }]
+            lineStyle: { type: 'dashed', color: 'red' },
+            data: [{ yAxis: Number(item.target) }]
           }
         : undefined
     }))
@@ -112,18 +124,6 @@ const singleChartOptions = computed(() =>
     chartSeries.value,
     selectedGraphType.value
   )
-)
-
-const compareChartOptions = computed(() =>
-  (comparisonCharts.value || []).map((chart) => ({
-    ...chart,
-    option: makeChartOptions(
-      `${chart.experimentName} — ${chart.batchLabel}`,
-      chart.xAxisLabels || [],
-      chart.series || [],
-      selectedGraphType.value
-    )
-  }))
 )
 </script>
 
@@ -167,7 +167,6 @@ const compareChartOptions = computed(() =>
       </template>
 
       <template v-else>
-        <!-- CHART -->
         <div class="single-layout">
           <div class="single-chart-card">
             <VChart class="chart" :option="singleChartOptions" autoresize />
@@ -179,16 +178,16 @@ const compareChartOptions = computed(() =>
               {{ selectedExperiment?.name || 'Experiment' }}
             </div>
 
-            <!-- TARGETS -->
+            <!-- 🔥 TARGETS -->
             <div class="panel-section">
               <div class="panel-section-title">Targets</div>
 
-              <div v-if="selectedExperimentTargets?.length">
+              <div v-if="derivedTargets.length">
                 <div
-                  v-for="target in selectedExperimentTargets"
+                  v-for="target in derivedTargets"
                   :key="target.target_name"
                 >
-                  {{ target.target_name }}: {{ target.target_value }}
+                  {{ target.target_name }} → {{ target.target_value }}
                 </div>
               </div>
 
@@ -201,7 +200,7 @@ const compareChartOptions = computed(() =>
             <div class="panel-section">
               <div class="panel-section-title">Metrics</div>
 
-              <div v-if="selectedExperimentMetrics?.length">
+              <div v-if="selectedExperimentMetrics.length">
                 <div
                   v-for="metric in selectedExperimentMetrics"
                   :key="metric.metric_id"
@@ -273,5 +272,31 @@ const compareChartOptions = computed(() =>
 
 .metrics-empty {
   color: #bbb;
+}
+
+.primary-btn {
+  padding: 12px 18px ;
+  background: #333;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  margin-bottom: 40px;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.primary-btn:hover {
+  background: #444;
+}
+
+.primary-btn:active {
+  background: #222;
+}
+
+/* 🔥 Disabled state */
+.primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

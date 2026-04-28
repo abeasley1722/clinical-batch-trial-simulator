@@ -1848,6 +1848,7 @@ def run_batch_thread(batch_id, batch):
             'started_at': datetime.now().isoformat(),
             'completed_count': 0,
             'total_count': 0,
+            'progress': 0,
             'batch_dir': None,
             'zip_path': None,
         }
@@ -1964,7 +1965,8 @@ def run_batch_thread(batch_id, batch):
     with batch_lock:
         #batches[batch_id]['replicates'] = replicates
         batches[batch_id]['patient_count'] = len(patients)
-        batches[batch_id]['total_jobs'] = len(patients)
+        batches[batch_id]['total_count'] = len(patients)
+        batches[batch_id]['completed_count'] = 0
 
         for p in patients:
             patient_name = p['name'] if isinstance(p, dict) else p
@@ -2074,6 +2076,20 @@ def run_batch_thread(batch_id, batch):
                                         print(f"  Traceback:\n{result['traceback']}")
 
                         completed += 1
+                        
+                        with batch_lock:
+                            batches[batch_id]['completed_count'] = completed
+                            batches[batch_id]['total_count'] = total_jobs
+
+                            # compute progress
+                            progress = int((completed / total_jobs) * 100) if total_jobs else 0
+                            batches[batch_id]['progress'] = progress
+
+                            # update status dynamically
+                            if completed < total_jobs:
+                                batches[batch_id]['status'] = 'running'
+                            else:
+                                batches[batch_id]['status'] = 'complete'
                         print(f"Batch {batch_id}: {result.get('patient_name', job_id)} {status} ({completed}/{total_jobs})")
 
                     except MPTimeoutError:
@@ -2110,7 +2126,10 @@ def run_batch_thread(batch_id, batch):
             batches[batch_id]['message'] = str(e)
             batches[batch_id]['traceback'] = traceback.format_exc()
         print(f"Batch {batch_id} failed: {e}")
-
+    with batch_lock:
+        if batches[batch_id]['status'] != 'error':
+            batches[batch_id]['status'] = 'complete'
+            batches[batch_id]['progress'] = 100
     # --- ANALYSIS PHASE ---
 
     #get a list of all completed csv paths
@@ -2207,7 +2226,7 @@ def run_batch_thread(batch_id, batch):
         time_after = sim_time[after_start]
 
         wobble, divergence = compute_wobble_divergence(time_after, col_after, target_values[i])
-
+        print(f'TARGET VALUE: {target_values[i]}')
         metric_obj = Metric(
             experiment_id=experiment.experiment_id,
             vital_sign_measured=vital_sign,
@@ -2215,7 +2234,7 @@ def run_batch_thread(batch_id, batch):
             controller_start_time=controller_start_time,
             mean=means[i],
             std_dev=stds[i],
-            target_value=target_values[i],
+            target_value=float(target_values[i]),
             tolerance=tolerances[i],
             time_within_target_range=time_within_target[i],
             percent_time_within_target_range=percent_time_within_target[i],

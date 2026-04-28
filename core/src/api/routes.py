@@ -9,6 +9,8 @@ Description:   API endpoints for the Pulse server
 import os
 import sys
 import threading
+import math
+import numpy as np
 import uuid
 import zipfile
 import requests as http_requests
@@ -236,7 +238,10 @@ def api_get_experiment(experiment_id):
 
 @api_bp.route('/api/metrics/by_experiment/<experiment_id>')
 def api_get_metrics_by_experiment(experiment_id):
-    return jsonify(get_metrics_by_experiment(experiment_id))
+    data = get_metrics_by_experiment(experiment_id)
+    cleaned_data = clean_for_json(data)
+    return jsonify(cleaned_data)
+
 
 # --- Patient ---
 
@@ -272,3 +277,36 @@ def api_get_raw_csv_dataframe(experiment_id):
     df = get_raw_csv_dataframe(experiment_id)
     df = df.astype(object).where(pd.notna(df), None)
     return jsonify(df.to_dict(orient='records'))
+
+
+def clean_for_json(obj):
+    if isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+
+    elif isinstance(obj, list):
+        return [clean_for_json(v) for v in obj]
+
+    elif isinstance(obj, bytes):  # 🔥 FIX
+        try:
+            return obj.decode('utf-8')
+        except:
+            return None
+
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+
+    elif isinstance(obj, (np.integer,)):
+        return int(obj)
+
+    elif isinstance(obj, (np.floating,)):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return float(obj)
+
+    elif obj is None:
+        return None
+
+    else:
+        return obj
