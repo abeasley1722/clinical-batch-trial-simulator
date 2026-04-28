@@ -14,7 +14,7 @@ import zipfile
 import requests as http_requests
 from datetime import datetime
 from pathlib import Path
-
+import pandas as pd
 from flask import Flask, request, jsonify, send_file, Blueprint
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
@@ -114,6 +114,7 @@ batch_cancel_flags = {}  # batch_id -> True if should cancel (for thread-level c
 @api_bp.route('/api/submit_batch', methods=['POST'])
 def submit_batch():
     batch = request.json
+    print(f"[BATCH] Received batch submission: {batch}")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     id = str(uuid.uuid4())[:8]
     batch_id = f"{timestamp}_{id}"
@@ -140,8 +141,20 @@ def batch_status(batch_id):
     with batch_lock:
         if batch_id not in batches:
             return jsonify({'status': 'not_found'}), 404
-        return jsonify(batches[batch_id])
 
+        batch = batches[batch_id]
+
+        completed = batch.get('completed_count', 0)
+        total = batch.get('total_count', 1)
+
+        progress = int((completed / total) * 100) if total else 0
+
+        return jsonify({
+            **batch,
+            'completed': completed,
+            'total': total,
+            'progress': progress
+        })
 
 @api_bp.route('/api/cancel_batch/<batch_id>', methods=['POST'])
 def cancel_batch(batch_id):
@@ -247,6 +260,7 @@ def api_get_patients_by_cohort(cohort_id):
 @api_bp.route('/api/retrieval/metrics/<experiment_id>')
 def api_get_metrics_dataframe(experiment_id):
     df = get_metrics_dataframe(experiment_id)
+    df = df.astype(object).where(pd.notna(df), None)
     return jsonify(df.to_dict(orient='records'))
 
 @api_bp.route('/api/retrieval/raw_csv_paths/<experiment_id>')
@@ -256,4 +270,5 @@ def api_get_raw_csv_paths(experiment_id):
 @api_bp.route('/api/retrieval/raw_csv/<experiment_id>')
 def api_get_raw_csv_dataframe(experiment_id):
     df = get_raw_csv_dataframe(experiment_id)
+    df = df.astype(object).where(pd.notna(df), None)
     return jsonify(df.to_dict(orient='records'))

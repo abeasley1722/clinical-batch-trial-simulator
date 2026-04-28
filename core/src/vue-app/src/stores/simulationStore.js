@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
+import { runSimulation, getBatchStatus } from '@/services/api'
 
 export const useSimulationStore = defineStore('simulation', {
   state: () => ({
     name: 'Test Batch',
-
-    duration: 300, // seconds
+    duration: 300,
     sampleRate: 50,
 
     workers: 4,
@@ -17,21 +17,60 @@ export const useSimulationStore = defineStore('simulation', {
       { name: 'adult', percent: 50 }
     ],
 
-    targetMetrics: {
-      hr_bpm: { target_value: 75, tolerance: 5, matching_function: '' },
-      spo2_pct: { target_value: 98, tolerance: 2, matching_function: '' },
-      etco2_mmhg: { target_value: 40, tolerance: 5, matching_function: '' },
-      rr_patient: { target_value: 16, tolerance: 3, matching_function: '' }
-    },
+
+    targetMetrics: {},
 
     startIntubated: false,
     ventSettings: {},
 
     events: [],
-    triggeredEvents: []
+    triggeredEvents: [],
+
+    // Progress tracking
+    batchId: null,
+    batchStatus: null,
+    progress: 0,
+    status: 'idle',
+    pollInterval: null
   }),
 
   actions: {
+    // =========================
+    // TARGET METRICS (FIXED)
+    // =========================
+    addTargetMetric(key) {
+      if (this.targetMetrics[key]) return
+
+      this.targetMetrics = {
+        ...this.targetMetrics,
+        [key]: {
+          target_value: 0,
+          tolerance: 0,
+          matching_function: ''
+        }
+      }
+    },
+
+    removeTargetMetric(key) {
+      const copy = { ...this.targetMetrics }
+      delete copy[key]
+      this.targetMetrics = copy
+    },
+
+    // =========================
+    // DEMOGRAPHICS
+    // =========================
+    addDemographic() {
+      this.demographics.push({ name: '', percent: 0 })
+    },
+
+    removeDemographic(index) {
+      this.demographics.splice(index, 1)
+    },
+
+    // =========================
+    // EVENTS
+    // =========================
     addEvent(event) {
       const newEvent = JSON.parse(JSON.stringify(event))
 
@@ -47,91 +86,129 @@ export const useSimulationStore = defineStore('simulation', {
       else this.events.splice(index, 1)
     },
 
-    addDemographic() {
-      this.demographics.push({ name: '', percent: 0 })
-    },
-
-    removeDemographic(index) {
-      this.demographics.splice(index, 1)
-    },
-
-    updateMetric(key, field, value) {
-      this.targetMetrics[key][field] = value
-    },
-
+    // =========================
+    // BUILD PAYLOAD (FINAL STRUCTURE)
+    // =========================
     buildPayload() {
       return {
         name: this.name,
-        patient_count: this.patientCount,
+        patient_count: Number(this.patientCount),
 
-        demographics: this.demographics,
+        demographics: this.demographics.map(d => ({
+          name: d.name,
+          percent: Number(d.percent)
+        })),
 
         target_metrics: this.targetMetrics,
 
-        duration_s: this.duration,
-        sample_rate_hz: this.sampleRate,
+        duration_s: Number(this.duration),
+        sample_rate_hz: Number(this.sampleRate),
 
         start_intubated: this.startIntubated,
-        vent_settings: this.ventSettings,
+        vent_settings: this.ventSettings || {},
 
         events: [...this.events, ...this.triggeredEvents],
 
-        workers: this.workers,
-        replicates: this.replicates
+        workers: Number(this.workers),
+        replicates: Number(this.replicates)
+      }
+    },
+
+    // =========================
+    // VALIDATION
+    // =========================
+    validatePayload() {
+      const total = this.demographics.reduce(
+        (sum, d) => sum + Number(d.percent || 0),
+        0
+      )
+
+      if (total !== 100) {
+        throw new Error(`Demographics must sum to 100%. Current: ${total}%`)
+      }
+
+      for (const d of this.demographics) {
+        if (!d.name) {
+          throw new Error('All demographics must have a name')
+        }
+      }
+    },
+
+    // =========================
+    // SUBMIT BATCH
+    // =========================
+    async submitBatch() {
+      try {
+        this.validatePayload()
+        this.status = 'submitting'
+
+        const payload = this.buildPayload()
+        console.log('SENDING:', payload)
+
+        const res = await runSimulation(payload)
+
+        this.batchId = res.batch_id
+
+        if (!this.batchId) {
+          throw new Error("batch_id missing from backend")
+        }
+        this.status = 'running'
+
+        this.startPolling()
+      } catch (err) {
+        console.error(err)
+        this.status = 'error'
+        alert(err.message)
+      }
+    },
+
+    // =========================
+    // POLLING (PROGRESS)
+    // =========================
+    startPolling() {
+      if (!this.batchId) return
+
+      // clear old interval if exists
+      if (this.pollInterval) {
+        clearInterval(this.pollInterval)
+      }
+
+      this.pollInterval = setInterval(async () => {
+        try {
+          const data = await getBatchStatus(this.batchId)
+
+          this.batchStatus = data
+          this.status = data.status
+
+          this.completed = data.completed ?? 0
+          this.total = data.total ?? 0
+          this.progress = data.progress ?? 0
+
+          if (data.status !== 'running') {
+            clearInterval(this.pollInterval)
+            this.pollInterval = null
+          }
+        } catch (err) {
+          console.error(err)
+          clearInterval(this.pollInterval)
+          this.pollInterval = null
+        }
+      }, 30000)
+    },
+
+    // =========================
+    // RESET (optional but useful)
+    // =========================
+    reset() {
+      this.batchId = null
+      this.batchStatus = null
+      this.progress = 0
+      this.status = 'idle'
+
+      if (this.pollInterval) {
+        clearInterval(this.pollInterval)
+        this.pollInterval = null
       }
     }
-
   }
 })
-
-
-
-// import { defineStore } from 'pinia'
-// import { api } from '@/services/api'
-
-// export const useSimulationStore = defineStore('simulation', {
-//   state: () => ({
-//     job_name: '',
-//     duration: 5,
-//     duration_unit: 'min',
-//     step_size: 0.02,
-//     replicates: 1,
-
-//     events: [],
-//     progress: 0,
-//     status: 'Ready'
-//   }),
-
-//   actions: {
-//     addEvent() {
-//       this.events.push({
-//         activation: 'time',
-//         time: 1,
-//         unit: 'min',
-//         type: 'pathology',
-//         params: getDefaultParams('pathology')
-//       })
-//     },
-
-//     removeEvent(i) {
-//       this.events.splice(i, 1)
-//     },
-
-//     async runSimulation() {
-//       this.status = 'Submitting...'
-//       this.progress = 10
-
-//       await api.runSimulation({
-//         job_name: this.job_name,
-//         duration: this.duration,
-//         duration_unit: this.duration_unit,
-//         step_size: this.step_size,
-//         replicates: this.replicates,
-//         events: this.events
-//       })
-
-//       this.progress = 100
-//       this.status = 'Complete'
-//     }
-//   }
-// })

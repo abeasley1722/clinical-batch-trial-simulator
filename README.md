@@ -48,4 +48,7 @@ Requirements:
 - Add to systems PATH
 - Install Vue: npm create vite@latest
 - 
-  
+
+
+# Developer script
+bash ./scripts/run_dev.sh
