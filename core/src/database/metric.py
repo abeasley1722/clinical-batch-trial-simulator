@@ -73,7 +73,7 @@ def get_latest_run_per_controller(experiment_id):
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
-def insert_metric(experiment_id, vital_sign=None, mae=None, median=None,
+def insert_metric(experiment_id, vital_sign=None, target_value=None, mae=None, median=None,
                   std_dev=None, time_within_target_range=None, percent_time_within_target_range=None,
                   wobble=None, divergence=None,
                   matching_function=None, matching_function_mae=None, metric_id=None):
@@ -83,10 +83,10 @@ def insert_metric(experiment_id, vital_sign=None, mae=None, median=None,
     with transaction() as conn:
         conn.execute("""
             INSERT INTO metrics
-                (metric_id, experiment_id, vital_sign, mae, median,
+                (metric_id, experiment_id, vital_sign, target_value, mae, median,
                  std_dev, time_within_target_range, percent_time_within_target_range, wobble, divergence, matching_function, matching_function_mae)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (mid, experiment_id, vital_sign, mae, median, std_dev,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (mid, experiment_id, vital_sign, target_value, mae, median, std_dev,
               time_within_target_range, percent_time_within_target_range, wobble, divergence, matching_function, matching_function_mae))
 
     return mid
@@ -96,6 +96,7 @@ def insert_metric_from_object(metric: Metric):
     return insert_metric(
         experiment_id=metric.experiment_id,
         vital_sign=metric.vital_sign_measured,
+        target_value=metric.target_value,
         mae=metric.mean_absolute_error,
         median=metric.mean,
         std_dev=metric.std_dev,

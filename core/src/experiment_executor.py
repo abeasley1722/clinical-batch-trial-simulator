@@ -47,7 +47,7 @@ from core.src.data_classes import Experiment, Patient, Scenario, Metric
 from core.src.database.patient import get_patients_by_demographic
 from core.src.database.batch import insert_batch
 from core.src.database.metric import insert_metric, insert_metric_from_object, insert_run
-from core.src.database.experiment import insert_experiment_from_object, update_experiment_from_object
+from core.src.database.experiment import insert_experiment_from_object, update_experiment, update_experiment_from_object
 
 # === PULSE IMPORTS ===
 from pulse.engine.PulseEngine import PulseEngine, eModelType
@@ -2129,6 +2129,7 @@ def run_batch_thread(batch_id, batch):
     experiment.mean_csv_path = str(ANALYSIS_RESULTS_FOLDER / f"batch_{batch_id}_mean.csv")
 
     #update experiment in database with mean csv path
+    update_experiment(experiment_id=experiment.experiment_id, status="completed")
     update_experiment_from_object(experiment)
 
     #get controller start time

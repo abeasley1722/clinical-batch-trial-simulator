@@ -137,6 +137,13 @@ def get_experiment(experiment_id):
             row["output_columns"] = json.loads(row["output_columns"])
     return row
 
+def get_experiment_csv(experiment_id):
+    """Fetch the mean_csv_path for an experiment. Returns a string or None."""
+    row = execute_one(
+        "SELECT mean_csv_path FROM experiments WHERE experiment_id = ?", (experiment_id,)
+    )
+    return row["mean_csv_path"] if row else None
+
 
 def get_all_experiments():
     """Fetch all experiments. Returns a list of dicts."""
