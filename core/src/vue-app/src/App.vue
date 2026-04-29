@@ -6,7 +6,7 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <!-- Top Bar -->
   <div class="top-bar">
-    <h3>My App</h3>
+    <h3>Clinical Batch Trial Simulator</h3>
   </div>
 
   <!-- Sidebar //Note: Create a settings page-->

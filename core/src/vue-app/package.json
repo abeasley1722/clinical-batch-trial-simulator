@@ -1,15 +1,23 @@
 {
   "name": "vue-app",
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "productName": "Clinical Batch Trial Simulator",
   "private": true,
   "type": "module",
+
+  "main": "main.js", 
+
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "electron": "electron .",
+    "electron:dev": "concurrently \"vite\" \"electron .\"",
+    "electron:build": "vite build && electron-builder",
     "test:unit": "vitest",
     "format": "prettier --write --experimental-cli src/"
   },
+
   "dependencies": {
     "echarts": "^6.0.0",
     "highcharts": "^12.6.0",
@@ -19,17 +27,46 @@
     "vue-echarts": "^8.0.1",
     "vue-router": "^5.0.4"
   },
+
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
     "@vitejs/plugin-vue-jsx": "^5.1.5",
     "@vue/test-utils": "^2.4.6",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "concurrently": "^9.0.0",
     "jsdom": "^29.0.1",
     "prettier": "3.8.1",
     "vite": "^8.0.3",
     "vite-plugin-vue-devtools": "^8.1.1",
     "vitest": "^4.1.2"
   },
+
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
-  }
+  },
+
+  "build": {
+  "appId": "com.tamucc.cbts",
+  "productName": "Clinical Batch Trial Simulator",
+  "directories": {
+    "output": "dist_electron"
+  },
+  "files": [
+    "dist/**/*",
+    "main.js",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "../../../assets/logo.ico"
+  },
+  "nsis": {
+  "oneClick": false,
+  "perMachine": false,
+  "allowToChangeInstallationDirectory": true,
+  "createDesktopShortcut": true,
+  "createStartMenuShortcut": true
+}
+}
 }
