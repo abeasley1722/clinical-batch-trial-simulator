@@ -16,7 +16,7 @@ $ErrorActionPreference = "Stop"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PROJECT_ROOT = Split-Path -Parent $SCRIPT_DIR
 $ENTRYPOINT = Join-Path $PROJECT_ROOT "core\src\run.py"
-$env:PULSE_ENGINE_PATH="C:\Users\badas\Pulse\builds\debug\install"
+
 Set-Location $PROJECT_ROOT
 
 # figure out where Pulse is installed — check a custom path first, then look in the usual spots

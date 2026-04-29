@@ -6,17 +6,16 @@ Description:   API endpoints for the Pulse server
 ============================================================ 
 """
 
+import glob
 import os
 import sys
 import threading
-import math
-import numpy as np
 import uuid
 import zipfile
 import requests as http_requests
 from datetime import datetime
 from pathlib import Path
-import pandas as pd
+
 from flask import Flask, request, jsonify, send_file, Blueprint
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
@@ -116,7 +115,6 @@ batch_cancel_flags = {}  # batch_id -> True if should cancel (for thread-level c
 @api_bp.route('/api/submit_batch', methods=['POST'])
 def submit_batch():
     batch = request.json
-    print(f"[BATCH] Received batch submission: {batch}")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     id = str(uuid.uuid4())[:8]
     batch_id = f"{timestamp}_{id}"
@@ -143,20 +141,8 @@ def batch_status(batch_id):
     with batch_lock:
         if batch_id not in batches:
             return jsonify({'status': 'not_found'}), 404
+        return jsonify(batches[batch_id])
 
-        batch = batches[batch_id]
-
-        completed = batch.get('completed_count', 0)
-        total = batch.get('total_count', 1)
-
-        progress = int((completed / total) * 100) if total else 0
-
-        return jsonify({
-            **batch,
-            'completed': completed,
-            'total': total,
-            'progress': progress
-        })
 
 @api_bp.route('/api/cancel_batch/<batch_id>', methods=['POST'])
 def cancel_batch(batch_id):
@@ -177,17 +163,31 @@ def cancel_batch(batch_id):
         return jsonify({'success': True, 'message': 'Cancellation requested'})
 
 
-@api_bp.route('/api/download_batch/<batch_id>')
-def download_batch(batch_id):
-    with batch_lock:
-        if batch_id not in batches:
-            return "Not found", 404
-        batch_info = batches[batch_id]
+@api_bp.route('/api/download_batch/<experiment_id>')
+def download_batch(experiment_id):
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        return "Experiment not found", 404
 
-    if 'zip_path' not in batch_info:
-        return "Not ready", 400
+    if experiment.get('status') not in ('complete', 'cancelled'):
+        return "Experiment not complete", 400
 
-    return send_file(batch_info['zip_path'], as_attachment=True)
+    output_dir = experiment.get('output_dir')
+    if not output_dir or not os.path.exists(output_dir):
+        return "Output directory not found", 404
+
+    # Use cached zip if already created
+    zip_path = os.path.join(output_dir, f"experiment_{experiment_id}.zip")
+    if not os.path.exists(zip_path):
+        try:
+            import zipfile
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for csv_file in glob.glob(os.path.join(output_dir, '*.csv')):
+                    zf.write(csv_file, os.path.basename(csv_file))
+        except Exception as e:
+            return f"Failed to create zip: {e}", 500
+
+    return send_file(zip_path, as_attachment=True, download_name=f"experiment_{experiment_id}.zip")
 
 @api_bp.route('/api/shutdown', methods=['POST'])
 def shutdown():
@@ -238,10 +238,7 @@ def api_get_experiment(experiment_id):
 
 @api_bp.route('/api/metrics/by_experiment/<experiment_id>')
 def api_get_metrics_by_experiment(experiment_id):
-    data = get_metrics_by_experiment(experiment_id)
-    cleaned_data = clean_for_json(data)
-    return jsonify(cleaned_data)
-
+    return jsonify(get_metrics_by_experiment(experiment_id))
 
 # --- Patient ---
 
@@ -265,7 +262,6 @@ def api_get_patients_by_cohort(cohort_id):
 @api_bp.route('/api/retrieval/metrics/<experiment_id>')
 def api_get_metrics_dataframe(experiment_id):
     df = get_metrics_dataframe(experiment_id)
-    df = df.astype(object).where(pd.notna(df), None)
     return jsonify(df.to_dict(orient='records'))
 
 @api_bp.route('/api/retrieval/raw_csv_paths/<experiment_id>')
@@ -275,38 +271,4 @@ def api_get_raw_csv_paths(experiment_id):
 @api_bp.route('/api/retrieval/raw_csv/<experiment_id>')
 def api_get_raw_csv_dataframe(experiment_id):
     df = get_raw_csv_dataframe(experiment_id)
-    df = df.astype(object).where(pd.notna(df), None)
     return jsonify(df.to_dict(orient='records'))
-
-
-def clean_for_json(obj):
-    if isinstance(obj, dict):
-        return {k: clean_for_json(v) for k, v in obj.items()}
-
-    elif isinstance(obj, list):
-        return [clean_for_json(v) for v in obj]
-
-    elif isinstance(obj, bytes):  # 🔥 FIX
-        try:
-            return obj.decode('utf-8')
-        except:
-            return None
-
-    elif isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return None
-        return obj
-
-    elif isinstance(obj, (np.integer,)):
-        return int(obj)
-
-    elif isinstance(obj, (np.floating,)):
-        if math.isnan(obj) or math.isinf(obj):
-            return None
-        return float(obj)
-
-    elif obj is None:
-        return None
-
-    else:
-        return obj
