@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     events              TEXT,           -- JSON blob
     output_columns      TEXT,           -- JSON blob
     mean_csv_path       TEXT,
+    output_dir          TEXT,
     status              TEXT NOT NULL DEFAULT 'pending',
     created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -82,6 +83,7 @@ CREATE TABLE IF NOT EXISTS metrics (
     metric_id               TEXT PRIMARY KEY,
     experiment_id           TEXT NOT NULL,
     vital_sign              TEXT,
+    target_value              REAL,
     mae                     REAL,
     median                  REAL,
     std_dev                 REAL,

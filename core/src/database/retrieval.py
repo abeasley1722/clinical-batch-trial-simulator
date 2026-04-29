@@ -21,7 +21,7 @@ from core.src.database.metric import (
     get_metrics_by_run,
 )
 from core.src.database.batch import get_batches_by_experiment
-from core.src.database.experiment import get_experiment
+from core.src.database.experiment import get_experiment, get_experiment_csv
 
 
 def get_all_runs(experiment_id):
@@ -63,18 +63,16 @@ def get_raw_csv_paths(experiment_id):
 
 def get_raw_csv_dataframe(experiment_id):
     """
-    Load and concatenate all raw CSVs for an experiment into one DataFrame.
-    Adds a 'patient_id' column from the batch record.
+    Get the mean CSV path for an experiment and load it into a DataFrame.
     """
-    batches = get_batches_by_experiment(experiment_id)
-    frames = []
-    for batch in batches:
-        path = batch.get("raw_csv_path")
-        if path:
+    mean_csv_path = get_experiment_csv(experiment_id)
+    if mean_csv_path:
             try:
-                df = pd.read_csv(path)
-                df["patient_id"] = batch["patient_id"]
-                frames.append(df)
-            except FileNotFoundError:
-                pass  # CSV not yet written or moved
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+                df = pd.read_csv(mean_csv_path)
+                return df
+            except Exception as e:
+                print(f"Error loading CSV at {mean_csv_path}: {e}")
+                return pd.DataFrame()
+    else:
+            print(f"No mean CSV path found for experiment {experiment_id}")
+            return pd.DataFrame()

@@ -24,7 +24,3 @@ def init_db():
         print("All tables created successfully.")
     finally:
         conn.close()
-
-
-if __name__ == "__main__":
-    init_db()

@@ -15,11 +15,13 @@ import sys
 
 from core.src import create_app, socketio
 from core.src.runtime_paths import PULSE_HOME, init_native_paths, init_runtime_dirs
-
-init_runtime_dirs()
-app = create_app()
+from core.src.init_db import init_db
 
 if __name__ == '__main__':
+    init_db()
+    init_runtime_dirs()
+    app = create_app()
+
     from multiprocessing import freeze_support
     freeze_support()
     

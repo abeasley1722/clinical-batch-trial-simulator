@@ -44,13 +44,10 @@ from core.src.vital_ranges import SOLDIER, ADULT, Demographic
 from core.src.analysis import compute_wobble_divergence
 from core.src.data_classes import Experiment, Patient, Scenario, Metric
 
-from core.src.init_db import init_db
 from core.src.database.patient import get_patients_by_demographic
 from core.src.database.batch import insert_batch
 from core.src.database.metric import insert_metric, insert_metric_from_object, insert_run
-from core.src.database.experiment import insert_experiment_from_object, update_experiment_from_object
-
-init_db()  # Ensure DB is initialized
+from core.src.database.experiment import insert_experiment_from_object, update_experiment, update_experiment_from_object
 
 # === PULSE IMPORTS ===
 from pulse.engine.PulseEngine import PulseEngine, eModelType
@@ -609,16 +606,8 @@ def run_single_patient(args):
         event_handler = BatchEventHandler()
         pulse.set_event_handler(event_handler)
         
-        # Build data requests dynamically from selected output columns
-        avail_vars = batch_config.get('available_variables', [])
-        output_columns = batch_config.get('output_columns')
-        if output_columns is not None and avail_vars:
-            selected_set = set(output_columns)
-            selected_vars = [v for v in avail_vars if v['key'] in selected_set]
-        elif avail_vars:
-            selected_vars = [v for v in avail_vars if v.get('default')]
-        else:
-            selected_vars = []
+        # Build data requests using ALL available variables
+        selected_vars = batch_config.get('available_variables', [])
 
         # Unit string -> Pulse unit object mapping (needed in worker process)
         worker_unit_map = {
@@ -1846,8 +1835,8 @@ def run_batch_thread(batch_id, batch):
             'patients': {},
             'created_at': datetime.now().isoformat(),
             'started_at': datetime.now().isoformat(),
-            'completed_count': 0,
-            'total_count': 0,
+            'completed_jobs': 0,
+            'total_jobs': 0,
             'batch_dir': None,
             'zip_path': None,
         }
@@ -1948,7 +1937,7 @@ def run_batch_thread(batch_id, batch):
 
     workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
     total_jobs = len(patients)
-    
+
     if len(patients) == 0:
         with batch_lock:
             batches[batch_id]['status'] = 'error'
@@ -1962,9 +1951,9 @@ def run_batch_thread(batch_id, batch):
 
     # Initialize job progress tracking (patient x replicate combinations)
     with batch_lock:
-        #batches[batch_id]['replicates'] = replicates
         batches[batch_id]['patient_count'] = len(patients)
         batches[batch_id]['total_jobs'] = len(patients)
+        batches[batch_id]['batch_dir'] = batch_dir
 
         for p in patients:
             patient_name = p['name'] if isinstance(p, dict) else p
@@ -2012,7 +2001,7 @@ def run_batch_thread(batch_id, batch):
             patient_args.append((p, config, batch_dir, job_id))
 
         # Run with ProcessPool using apply_async for non-blocking cancellation support
-        print(f"Starting batch {batch_id} with {workers} workers for {total_jobs} jobs")
+        print(f"\nStarting batch {batch_id} with {workers} workers for {total_jobs} jobs")
 
         csv_paths = {}
         completed = 0
@@ -2057,6 +2046,7 @@ def run_batch_thread(batch_id, batch):
                         with batch_lock:
                             if job_id in batches[batch_id]['patients']:
                                 batches[batch_id]['patients'][job_id]['status'] = status
+                                batches[batch_id]['completed_jobs'] += 1
                                 if status == 'complete':
                                     batches[batch_id]['patients'][job_id]['csv_path'] = result['csv_path']
                                     batches[batch_id]['patients'][job_id]['sim_time'] = result['duration']
@@ -2122,27 +2112,24 @@ def run_batch_thread(batch_id, batch):
     for path in completed_csv_paths:
         df = pd.read_csv(path)
 
-        #keep only timestamp and user selected columns
-        cols_to_keep = ['sim_time_s'] + [c for c in experiment.output_columns if c in df.columns]
-        df = df[cols_to_keep]
-
         #round timestamps to nearest millisecond
         df['sim_time_s'] = df['sim_time_s'].round(3)
 
-    dfs.append(df)
+        dfs.append(df)
 
     #concatenate all dataframes into one
     all_data = pd.DataFrame()
     if dfs:
         all_data = pd.concat(dfs, ignore_index=True)
 
-    mean_df = all_data.groupby('sim_time_s').mean().reset_index()
+    mean_df = all_data.groupby('sim_time_s').mean(numeric_only=True).reset_index()
 
     #save mean csv to database and filesystem
     mean_df.to_csv(str(ANALYSIS_RESULTS_FOLDER / f"batch_{batch_id}_mean.csv"),index=False)
     experiment.mean_csv_path = str(ANALYSIS_RESULTS_FOLDER / f"batch_{batch_id}_mean.csv")
 
     #update experiment in database with mean csv path
+    update_experiment(experiment_id=experiment.experiment_id, status="completed")
     update_experiment_from_object(experiment)
 
     #get controller start time

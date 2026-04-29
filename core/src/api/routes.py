@@ -6,6 +6,7 @@ Description:   API endpoints for the Pulse server
 ============================================================ 
 """
 
+import glob
 import os
 import sys
 import threading
@@ -162,17 +163,31 @@ def cancel_batch(batch_id):
         return jsonify({'success': True, 'message': 'Cancellation requested'})
 
 
-@api_bp.route('/api/download_batch/<batch_id>')
-def download_batch(batch_id):
-    with batch_lock:
-        if batch_id not in batches:
-            return "Not found", 404
-        batch_info = batches[batch_id]
+@api_bp.route('/api/download_batch/<experiment_id>')
+def download_batch(experiment_id):
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        return "Experiment not found", 404
 
-    if 'zip_path' not in batch_info:
-        return "Not ready", 400
+    if experiment.get('status') not in ('complete', 'cancelled'):
+        return "Experiment not complete", 400
 
-    return send_file(batch_info['zip_path'], as_attachment=True)
+    output_dir = experiment.get('output_dir')
+    if not output_dir or not os.path.exists(output_dir):
+        return "Output directory not found", 404
+
+    # Use cached zip if already created
+    zip_path = os.path.join(output_dir, f"experiment_{experiment_id}.zip")
+    if not os.path.exists(zip_path):
+        try:
+            import zipfile
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for csv_file in glob.glob(os.path.join(output_dir, '*.csv')):
+                    zf.write(csv_file, os.path.basename(csv_file))
+        except Exception as e:
+            return f"Failed to create zip: {e}", 500
+
+    return send_file(zip_path, as_attachment=True, download_name=f"experiment_{experiment_id}.zip")
 
 @api_bp.route('/api/shutdown', methods=['POST'])
 def shutdown():

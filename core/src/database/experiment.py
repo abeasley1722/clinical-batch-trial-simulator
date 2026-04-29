@@ -31,7 +31,7 @@ from core.src.data_classes import Experiment
 
 def insert_experiment(experiment_id, name, target_metric=None,
                       custom_target_value=None, simulation_duration=None,
-                      events=None, output_columns=None, mean_csv_path=None, status='pending'):
+                      events=None, output_columns=None, mean_csv_path=None, output_dir=None, status='pending'):
     """
     Insert an experiment record. Returns the experiment_id.
     events and output_columns should be lists — stored as JSON.
@@ -43,10 +43,10 @@ def insert_experiment(experiment_id, name, target_metric=None,
         conn.execute("""
             INSERT INTO experiments
                 (experiment_id, name, target_metric, custom_target_value,
-                 simulation_duration, events, output_columns, mean_csv_path, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 simulation_duration, events, output_columns, mean_csv_path, output_dir, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (experiment_id, name, target_metric, custom_target_value,
-              simulation_duration, events_json, output_columns_json, mean_csv_path, status))
+              simulation_duration, events_json, output_columns_json, mean_csv_path, output_dir, status))
 
     return experiment_id
 
@@ -58,12 +58,13 @@ def insert_experiment_from_object(experiment: Experiment):
         simulation_duration=experiment.simulation_duration,
         events=experiment.events,
         output_columns=experiment.output_columns,
-        mean_csv_path=experiment.mean_csv_path
+        mean_csv_path=experiment.mean_csv_path,
+        output_dir=experiment.output_dir
     )
 
 def update_experiment(experiment_id, name=None, target_metric=None,
                       custom_target_value=None, simulation_duration=None,
-                      events=None, output_columns=None, mean_csv_path=None, status=None):
+                      events=None, output_columns=None, mean_csv_path=None, output_dir=None, status=None):
     """
     Update an experiment record. Only fields passed (non-None) will be updated.
     Returns the experiment_id.
@@ -92,6 +93,9 @@ def update_experiment(experiment_id, name=None, target_metric=None,
     if mean_csv_path is not None:
         fields.append("mean_csv_path = ?")
         params.append(mean_csv_path)
+    if output_dir is not None:
+        fields.append("output_dir = ?")
+        params.append(output_dir)
     if status is not None:
         fields.append("status = ?")
         params.append(status)
@@ -117,7 +121,8 @@ def update_experiment_from_object(experiment: Experiment):
         simulation_duration=experiment.simulation_duration,
         events=experiment.events,
         output_columns=experiment.output_columns,
-        mean_csv_path=experiment.mean_csv_path
+        mean_csv_path=experiment.mean_csv_path,
+        output_dir=experiment.output_dir
     )
 
 def get_experiment(experiment_id):
@@ -131,6 +136,13 @@ def get_experiment(experiment_id):
         if row.get("output_columns"):
             row["output_columns"] = json.loads(row["output_columns"])
     return row
+
+def get_experiment_csv(experiment_id):
+    """Fetch the mean_csv_path for an experiment. Returns a string or None."""
+    row = execute_one(
+        "SELECT mean_csv_path FROM experiments WHERE experiment_id = ?", (experiment_id,)
+    )
+    return row["mean_csv_path"] if row else None
 
 
 def get_all_experiments():
