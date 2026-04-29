@@ -1,3 +1,4 @@
+
 import { defineStore } from 'pinia'
 import {
   getExperiments,
@@ -15,9 +16,18 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     selectedVitalKeys: [],
     selectedGraphType: 'line',
 
+    // 🔥 backend-driven grouping (gases, ventilator, etc.)
+    selectedGroups: [],
+
     metrics: [],
     batches: [],
-    rawData: []
+    rawData: [],
+
+    // 🔥 loading state (for overlay)
+    loading: false,
+
+    // 🔥 cache for fetched datasets
+    cachedGroups: {}
   }),
 
   getters: {
@@ -38,7 +48,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       }))
     },
 
-    // ✅ only numeric vitals
+    // ✅ Available numeric vitals
     availableVitals(state) {
       if (!state.rawData?.length) return []
 
@@ -56,7 +66,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       return state.rawData.map(row => row.sim_time_s)
     },
 
-    // 🔥 FIXED: now includes target_value
+    // 🔥 CLEAN SERIES (no fake group logic)
     chartSeries(state) {
       if (!state.rawData?.length) return []
 
@@ -67,20 +77,15 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
             .filter(k => typeof state.rawData[0][k] === 'number')
 
       return keys.map(key => {
-        // 🔥 MATCH METRIC TO VITAL
         const metric = state.metrics.find(
           m => m.vital_sign === key
         )
 
         return {
           name: key.toUpperCase(),
-          data: state.rawData.map(row => row[key] ?? null),
-          unit: '',
-
-          // 🔥 THIS IS THE FIX
+          data: state.rawData.map(r => r[key] ?? null),
+          type: state.selectedGraphType,
           target: metric ? Number(metric.target_value) : null,
-
-          // optional (if you later store tolerance in metrics)
           tolerance: metric?.tolerance ?? null
         }
       })
@@ -103,21 +108,27 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     async selectExperiment(id) {
       this.selectedExperimentId = id
 
+      // 🔥 reset cache when switching experiment
+      this.cachedGroups = {}
+
+      this.loading = true
+
       try {
         await Promise.all([
           this.loadMetrics(id),
           this.loadBatches(id),
-          this.loadRawCSV(id)
+          this.loadRawCSV(id) // default = core vitals
         ])
       } catch (err) {
         console.error('Experiment load failed:', err)
+      } finally {
+        this.loading = false
       }
     },
 
     async loadMetrics(experimentId) {
       const data = await getMetricsByExperiment(experimentId)
 
-      // 🔥 SAFETY: ensure numbers (prevents bytes/strings issues)
       this.metrics = (data || []).map(m => ({
         ...m,
         target_value:
@@ -131,18 +142,47 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       this.batches = await getBatchesByExperiment(experimentId)
     },
 
-    async loadRawCSV(experimentId) {
-      const data = await getRawCSVData(experimentId)
+    // 🔥 Load CSV with caching
+    async loadRawCSV(experimentId, groups = null) {
+      const key = groups ? groups.join(',') : 'core'
 
-      if (!data?.length) {
-        this.rawData = []
+      // ✅ use cache if available
+      if (this.cachedGroups[key]) {
+        this.rawData = this.cachedGroups[key]
         return
       }
 
-      // ensure proper ordering
-      data.sort((a, b) => a.sim_time_s - b.sim_time_s)
+      this.loading = true
 
-      this.rawData = data
+      try {
+        const data = await getRawCSVData(experimentId, groups)
+
+        if (!data?.length) {
+          this.rawData = []
+          return
+        }
+
+        // ensure proper ordering
+        data.sort((a, b) => a.sim_time_s - b.sim_time_s)
+
+        // save to cache
+        this.cachedGroups[key] = data
+
+        this.rawData = data
+      } catch (err) {
+        console.error('Raw CSV load failed:', err)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // 🔥 Change groups (triggers fetch)
+    async setGroups(groups) {
+      this.selectedGroups = groups
+
+      if (!this.selectedExperimentId) return
+
+      await this.loadRawCSV(this.selectedExperimentId, groups)
     },
 
     setGraphType(type) {
@@ -158,3 +198,4 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     }
   }
 })
+

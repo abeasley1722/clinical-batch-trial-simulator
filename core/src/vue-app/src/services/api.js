@@ -1,7 +1,7 @@
 const BASE_URL = 'http://localhost:8080'
 
 // ========================
-// REQUEST HELPER (FIXES YOUR ERROR)
+// REQUEST HELPER 
 // ========================
 async function request(url, options = {}) {
   const res = await fetch(url, {
@@ -134,8 +134,15 @@ export function getRawCSVPaths(experimentId) {
   return request(`${BASE_URL}/api/retrieval/raw_csv_paths/${experimentId}`)
 }
 
-export function getRawCSVData(experimentId) {
-  return request(`${BASE_URL}/api/retrieval/raw_csv/${experimentId}`)
+export function getRawCSVData(experimentId, selection = null) {
+  let url = `${BASE_URL}/api/retrieval/raw_csv/${experimentId}`
+
+  if (selection && selection.length) {
+    const query = selection.join(',')
+    url += `?selection=${query}`
+  }
+
+  return request(url)
 }
 
 // ========================

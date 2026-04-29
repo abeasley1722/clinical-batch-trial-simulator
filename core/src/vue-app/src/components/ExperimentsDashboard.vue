@@ -1,31 +1,30 @@
+
 <script setup>
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart, ScatterChart } from 'echarts/charts'
+import { LineChart } from 'echarts/charts'
 import {
   TitleComponent,
   TooltipComponent,
   GridComponent,
-  LegendComponent,
   DataZoomComponent,
   MarkLineComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { useExperimentDashboardStore } from '../stores/experimentDashboardStore'
 import { useRouter } from 'vue-router'
+import LoadingOverlay from './LoadingOverlay.vue'
 
 const router = useRouter()
 
 use([
   CanvasRenderer,
   LineChart,
-  ScatterChart,
   TitleComponent,
   TooltipComponent,
   GridComponent,
-  LegendComponent,
   DataZoomComponent,
   MarkLineComponent
 ])
@@ -39,76 +38,127 @@ onMounted(() => {
 const {
   experiments,
   selectedExperimentId,
-  selectedGraphType
+  selectedGraphType,
+  selectedGroups
 } = storeToRefs(store)
 
-// ✅ SAFE COMPUTEDS
-const hasExperiments = computed(() => (store.experiments || []).length > 0)
-const selectedExperiment = computed(() => store.selectedExperiment || {})
-const selectedExperimentMetrics = computed(() => store.selectedExperimentMetrics || [])
-const availableBatches = computed(() => store.availableBatches || [])
-const availableVitals = computed(() => store.availableVitals || [])
-const chartSeries = computed(() => store.chartSeries || [])
-const chartXAxisLabels = computed(() => store.chartXAxisLabels || [])
+// ========================
+// GROUP OPTIONS
+// ========================
+const GROUP_OPTIONS = [
+  { key: null, label: 'Core Vitals' },
+  { key: 'gases', label: 'Gases' },
+  { key: 'ventilator', label: 'Ventilator' },
+  { key: 'circulation', label: 'Circulation' },
+  { key: 'controller', label: 'Controller' }
+]
 
-// 🔥 DERIVE TARGETS FROM METRICS
-const derivedTargets = computed(() =>
-  selectedExperimentMetrics.value.map(m => ({
-    target_name: m.vital_sign,
-    target_value: m.target_value
-  }))
-)
+// ========================
+// GROUP TOGGLE
+// ========================
+async function toggleGroup(groupKey) {
+  let updated = [...selectedGroups.value]
+
+  if (groupKey === null) {
+    updated = []
+  } else {
+    if (updated.includes(groupKey)) {
+      updated = updated.filter(g => g !== groupKey)
+    } else {
+      updated.push(groupKey)
+    }
+  }
+
+  await store.setGroups(updated)
+}
+
+// ========================
+// COMPUTEDS
+// ========================
+const chartXAxisLabels = computed(() => store.chartXAxisLabels || [])
+const chartSeries = computed(() => store.chartSeries || [])
+
+const selectedExperiment = computed(() => store.selectedExperiment || {})
+const visibleMetrics = computed(() => {
+  if (!store.rawData?.length) return []
+
+  const keys = Object.keys(store.rawData[0] || {})
+
+  return store.selectedExperimentMetrics.filter(m =>
+    keys.includes(m.vital_sign)
+  )
+})
+
+// ========================
+// SPLIT CHARTS
+// ========================
+const groupedSeries = computed(() => {
+  const chunkSize = 4
+  const chunks = []
+
+  for (let i = 0; i < chartSeries.value.length; i += chunkSize) {
+    chunks.push(chartSeries.value.slice(i, i + chunkSize))
+  }
+
+  return chunks
+})
+
+function extractGroupName(seriesGroup) {
+  if (!seriesGroup.length) return ''
+  const first = seriesGroup[0].name
+  const parts = first.split(' - ')
+  return parts.length > 1 ? parts[0] : 'Vitals'
+}
 
 // ========================
 // HELPERS
 // ========================
 function formatMetricValue(value) {
   if (value === null || value === undefined || value === '') return '-'
-  if (typeof value === 'number') return Number.isInteger(value) ? `${value}` : value.toFixed(2)
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? `${value}` : value.toFixed(2)
+  }
   return `${value}`
 }
 
 // ========================
-// CHART BUILDER
+// CHART OPTIONS
 // ========================
-function makeChartOptions(title, xAxisLabels = [], series = [], graphType) {
+function makeChartOptions(title, xAxisLabels, series, graphType) {
   return {
     title: { text: title },
-    tooltip: { trigger: 'axis' },
-    legend: { show: false },
-    grid: { left: 56, right: 24, top: 88, bottom: 90 },
+    tooltip: { trigger: 'axis'},
+    legend: { type: 'scroll', // important for many lines
+      top: 25 },
+    grid: { left: 50, right: 20, top: 100, bottom: 60 },
+
     dataZoom: [
-      { type: 'inside', start: 0, end: 100 },
-      { type: 'slider', bottom: 24, start: 0, end: 100 }
+      { type: 'inside' },
+      { type: 'slider' }
     ],
+
     xAxis: {
       type: 'category',
-      data: xAxisLabels || [],
+      data: xAxisLabels,
       boundaryGap: false
     },
+
     yAxis: {
       type: 'value',
       scale: true
     },
 
-    // 🔥 GLOBAL TARGET LINES
-    yAxis: {
-      type: 'value',
-      scale: true,
-      splitLine: { show: true },
-      axisLine: { show: true }
-    },
-
-    series: (series || []).map((item) => ({
+    series: series.map(item => ({
       name: item.name,
       type: graphType,
-      data: item.data || [],
+      large: true,
+      sampling: 'lttb',
+      showSymbol: false,
+      data: item.data,
 
-      // 🔥 FIXED TARGET LINE
-      markLine: item.target !== null && item.target !== undefined
+      markLine: item.target
         ? {
             symbol: ['none', 'none'],
-            silent: true,
             lineStyle: { type: 'dashed', color: 'red' },
             data: [{ yAxis: Number(item.target) }]
           }
@@ -116,42 +166,26 @@ function makeChartOptions(title, xAxisLabels = [], series = [], graphType) {
     }))
   }
 }
-
-const singleChartOptions = computed(() =>
-  makeChartOptions(
-    selectedExperiment.value?.name || 'Experiment',
-    chartXAxisLabels.value,
-    chartSeries.value,
-    selectedGraphType.value
-  )
-)
 </script>
 
 <template>
+  <LoadingOverlay :visible="store.loading" />
+
   <div class="wrapper">
+
     <!-- LEFT PANEL -->
     <div class="left-panel">
       <h3>SAVED EXPERIMENTS</h3>
 
-      <template v-if="hasExperiments">
-        <div
-          v-for="experiment in experiments"
-          :key="experiment.experiment_id"
-          class="experiment-row"
-        >
-          <button
-            class="exp-btn"
-            :class="{ active: experiment.experiment_id === selectedExperimentId }"
-            @click="store.selectExperiment(experiment.experiment_id)"
-          >
-            {{ experiment.name }}
-          </button>
-        </div>
-      </template>
-
-      <div v-else class="left-empty">
-        No experiments
-      </div>
+      <button
+        v-for="exp in experiments"
+        :key="exp.experiment_id"
+        class="exp-btn"
+        :class="{ active: exp.experiment_id === selectedExperimentId }"
+        @click="store.selectExperiment(exp.experiment_id)"
+      >
+        {{ exp.name }}
+      </button>
 
       <button class="primary-btn" @click="router.push('/')">
         Create Experiment
@@ -160,62 +194,100 @@ const singleChartOptions = computed(() =>
 
     <!-- MAIN CONTENT -->
     <div class="content">
-      <template v-if="!hasExperiments">
-        <div class="empty-state">
-          <div class="empty-state-title">No existing experiments</div>
+
+      <!-- LEFT SIDE (charts + toggle) -->
+      <div class="charts-section">
+
+        <!-- GROUP TOGGLER -->
+        <div class="group-toggle">
+          <button
+            v-for="g in GROUP_OPTIONS"
+            :key="g.label"
+            :class="{
+              active:
+                g.key === null
+                  ? selectedGroups.length === 0
+                  : selectedGroups.includes(g.key)
+            }"
+            @click="toggleGroup(g.key)"
+          >
+            ✔ {{ g.label }}
+          </button>
         </div>
-      </template>
 
-      <template v-else>
-        <div class="single-layout">
-          <div class="single-chart-card">
-            <VChart class="chart" :option="singleChartOptions" autoresize />
-          </div>
-
-          <!-- METRICS PANEL -->
-          <div class="metrics-panel">
-            <div class="metrics-panel-title">
-              {{ selectedExperiment?.name || 'Experiment' }}
-            </div>
-
-            <!-- 🔥 TARGETS -->
-            <div class="panel-section">
-              <div class="panel-section-title">Targets</div>
-
-              <div v-if="derivedTargets.length">
-                <div
-                  v-for="target in derivedTargets"
-                  :key="target.target_name"
-                >
-                  {{ target.target_name }} → {{ target.target_value }}
-                </div>
-              </div>
-
-              <div v-else class="metrics-empty">
-                No targets available
-              </div>
-            </div>
-
-            <!-- METRICS -->
-            <div class="panel-section">
-              <div class="panel-section-title">Metrics</div>
-
-              <div v-if="selectedExperimentMetrics.length">
-                <div
-                  v-for="metric in selectedExperimentMetrics"
-                  :key="metric.metric_id"
-                >
-                  {{ metric.vital_sign }}: {{ formatMetricValue(metric.mae) }}
-                </div>
-              </div>
-
-              <div v-else class="metrics-empty">
-                No metrics available
-              </div>
-            </div>
+        <!-- CHARTS -->
+        <div class="charts-container">
+          <div
+            v-for="(seriesGroup, index) in groupedSeries"
+            :key="index"
+            class="chart-card"
+          >
+            <VChart
+              class="chart"
+              :option="makeChartOptions(
+                extractGroupName(seriesGroup) + ' Data',
+                chartXAxisLabels,
+                seriesGroup,
+                selectedGraphType
+              )"
+              autoresize
+            />
           </div>
         </div>
-      </template>
+
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div class="right-panel">
+
+        <div class="panel-title">
+          {{ selectedExperiment?.name || 'Experiment' }}
+        </div>
+
+        <!-- TARGETS -->
+        <div class="panel-section">
+          <div class="section-title">Targets</div>
+
+          <div v-if="visibleMetrics.length">
+            <div
+              v-for="m in visibleMetrics"
+              :key="m.metric_id"
+              class="panel-row"
+            >
+              <span>{{ m.vital_sign }}</span>
+              <span class="target">→ {{ m.target_value ?? '-' }}</span>
+            </div>
+          </div>
+
+          <div v-else class="empty">
+            No targets available
+          </div>
+        </div>
+
+        <!-- METRICS -->
+        <div class="panel-section">
+          <div class="section-title">Metrics</div>
+
+          <div v-if="visibleMetrics.length">
+            <div
+              v-for="m in visibleMetrics"
+              :key="m.metric_id"
+              class="panel-row"
+            >
+              <span>{{ m.vital_sign }}</span>
+              <span class="metric">
+                {{ formatMetricValue(m.mae) }}
+              </span>
+            </div>
+          </div>
+
+          <div v-else class="empty">
+            No metrics available
+          </div>
+        </div>
+
+      </div>
+
     </div>
   </div>
 </template>
@@ -250,53 +322,102 @@ const singleChartOptions = computed(() =>
 }
 
 .content {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
   flex: 1;
 }
 
-.single-layout {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 16px;
-}
-
 .chart {
-  height: 500px;
+  height: 400px;
 }
 
-.metrics-panel {
+/* CHART AREA */
+.charts-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.charts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* TOGGLE */
+.group-toggle {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.group-toggle button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #ddd;
+  cursor: pointer;
+}
+
+.group-toggle button.active {
+  background: #42b883;
+  color: white;
+  font-weight: bold;
+}
+
+/* RIGHT PANEL */
+.right-panel {
   background: #1a1a1a;
   color: white;
   padding: 15px;
   border-radius: 12px;
 }
 
-.metrics-empty {
-  color: #bbb;
+.panel-title {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.panel-section {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.panel-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.target {
+  color: #4fc3f7;
+}
+
+.metric {
+  color: #81c784;
+}
+
+.empty {
+  color: #aaa;
 }
 
 .primary-btn {
-  padding: 12px 18px ;
+  padding: 12px 18px;
   background: #333;
   border: none;
   border-radius: 8px;
   color: white;
   cursor: pointer;
   margin-bottom: 40px;
-  transition: all 0.2s ease;
-  font-weight: 600;
 }
 
 .primary-btn:hover {
   background: #444;
 }
-
-.primary-btn:active {
-  background: #222;
-}
-
-/* 🔥 Disabled state */
-.primary-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 </style>
+

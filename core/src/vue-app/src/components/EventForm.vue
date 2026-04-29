@@ -34,6 +34,9 @@ const params = reactive({
   itime: 1.0,
 
   controller: 'default_controller',
+  http_url: 'http://localhost:5001',
+  timeout: 10,
+  config: '',
   fluid_controller: 'default_fluid_controller',
 
   drug: 'Epinephrine',
@@ -91,10 +94,6 @@ function submit(e) {
       }
       break
 
-    case 'start_controller':
-      event.params = { controller: params.controller }
-      break
-
     case 'start_fluid_controller':
       event.params = { controller: params.fluid_controller }
       break
@@ -133,6 +132,31 @@ function submit(e) {
         duration: params.duration,
         unit: params.duration_unit
       }
+      break
+
+    case 'controller':
+      // supports BOTH premade + custom (HTTP) controllers
+      event.params = {
+        controller: params.controller
+      }
+
+      // 🔥 if using HTTP controller, attach extra config
+      if (params.controller === 'http_controller') {
+        event.params.url = params.http_url || 'http://localhost:5001'
+        event.params.timeout = params.timeout || 10
+
+        // optional JSON config
+        if (params.config) {
+          try {
+            event.params.config = typeof params.config === 'string'
+              ? JSON.parse(params.config)
+              : params.config
+          } catch (err) {
+            console.warn('Invalid controller config JSON')
+          }
+        }
+      }
+
       break
   }
 
@@ -194,11 +218,11 @@ function submit(e) {
         <option value="intubate">Intubate</option>
         <option value="start_vent">Start Vent</option>
         <option value="change_vent">Change Vent</option>
-        <option value="start_controller">Vent Controller</option>
         <option value="start_fluid_controller">Start Fluid Controller</option>
         <option value="stop_fluid_controller">Stop Fluid Controller</option>
         <option value="bolus">Drug Bolus</option>
         <option value="infusion">Drug Infusion</option>
+        <option value="controller">Controller</option>
         <option value="compound_infusion">Fluid/Blood Infusion</option>
         <option value="exercise">Exercise</option>
       </select>
@@ -230,6 +254,35 @@ function submit(e) {
         <input v-model.number="params.rr" placeholder="RR" />
         <input v-model.number="params.itime" placeholder="I-Time" />
       </div>
+
+      <div v-if="type==='controller'" class="row">
+      <!-- Controller Type -->
+      <select v-model="params.controller">
+        <option value="default_controller">Simple FiO₂</option>
+        <option value="ardsnet_controller">ARDSNet</option>
+        <option value="adaptive_controller">Adaptive</option>
+        <option value="random_walk_controller">Random Walk</option>
+        <option value="http_controller">HTTP Controller</option>
+      </select>
+    </div>
+
+    <div v-if="type==='controller' && params.controller==='http_controller'" class="row">
+      <input
+        v-model="params.http_url"
+        placeholder="Controller URL (http://localhost:5001)"
+      />
+
+      <input
+        v-model.number="params.timeout"
+        type="number"
+        placeholder="Timeout (s)"
+      />
+
+      <input
+        v-model="params.config"
+        placeholder='JSON config {"target_spo2":0.92}'
+      />
+    </div>
 
     </div>
 

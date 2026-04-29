@@ -2202,7 +2202,7 @@ def run_batch_thread(batch_id, batch):
             controller_start_time=controller_start_time,
             mean=means[i],
             std_dev=stds[i],
-            target_value=target_values[i],
+            target_value=float(target_values[i]),
             tolerance=tolerances[i],
             time_within_target_range=time_within_target[i],
             percent_time_within_target_range=percent_time_within_target[i],

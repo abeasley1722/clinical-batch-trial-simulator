@@ -270,5 +270,29 @@ def api_get_raw_csv_paths(experiment_id):
 
 @api_bp.route('/api/retrieval/raw_csv/<experiment_id>')
 def api_get_raw_csv_dataframe(experiment_id):
-    df = get_raw_csv_dataframe(experiment_id)
+    """
+    Query params:
+        ?selection=gases,ventilator
+        ?selection=all
+        ?selection=hr_bpm,spo2_pct
+    """
+
+    # 🔥 Get selection from query params
+    selection_param = request.args.get("selection")
+
+    if selection_param:
+        selection = selection_param.split(",")
+    else:
+        selection = None  # default → core vitals
+
+    # 🔥 Fetch filtered dataframe
+    df = get_raw_csv_dataframe(experiment_id, selection)
+
+    # 🔥 Convert NaN → None (JSON safe)
+    df = df.where(df.notna(), None)
+
+    # 🔥 Debug (corrected)
+    print("Columns returned:", df.columns.tolist())
+    print(df.head())
+
     return jsonify(df.to_dict(orient='records'))
