@@ -15,11 +15,11 @@ Pulse Implementation
 - Open the terminal and clone the repo: git clone https://gitlab.kitware.com/physiology/engine.git
 
 ## Set up virtual enviornment
-- Move to the engine folder
+- Move to the root of the project
 - sudo apt update
 - sudo apt install -y build-essential cmake git python3 python3-venv python3-pip
-- python3 -m venv .venv
-- source .venv/bin/activate
+- python(or python3) -m venv .venv
+- .\.venv\Scripts\Activate
 - pip install -U pip
 - pip install -r requirements.txt
 
@@ -48,4 +48,7 @@ Requirements:
 - Add to systems PATH
 - Install Vue: npm create vite@latest
 - 
-  
+
+
+# Developer script
+bash ./scripts/run_dev.sh
