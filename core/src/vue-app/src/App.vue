@@ -1,13 +1,18 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { serverUrl, connectionStatus, connectToServer } from './services/server.js'
+import logoUrl from './assets/logo.png'
 
 const inputUrl = ref(serverUrl.value)
 
 function handleConnect() {
   connectToServer(inputUrl.value)
 }
+
+onMounted(() => {
+  connectToServer(inputUrl.value)
+})
 
 const STATUS_COLOR = {
   disconnected: '#7f8c8d',
@@ -21,7 +26,7 @@ const STATUS_COLOR = {
  <div class="app-layout">
   <!-- Top Bar -->
   <div class="top-bar">
-    <h3>Clinical Batch Trial Simulator</h3>
+    <img :src="logoUrl" class="top-logo" alt="Clinical Batch Trial Simulator" />
     <div class="server-connect">
       <span class="status-dot" :style="{ background: STATUS_COLOR[connectionStatus] }"></span>
       <label>Server:</label>
@@ -73,6 +78,12 @@ const STATUS_COLOR = {
   padding: 0 20px;
   z-index: 1000;
   box-sizing: border-box;
+}
+
+.top-logo {
+  height: 44px;
+  width: auto;
+  object-fit: contain;
 }
 
 .server-connect {

@@ -148,7 +148,8 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       wobble: toNumberOrNull(m.wobble),
       divergence: toNumberOrNull(m.divergence),
       percent_time_within_target_range: toNumberOrNull(m.percent_time_within_target_range),
-      time_within_target_range: toNumberOrNull(m.time_within_target_range)
+      time_within_target_range: toNumberOrNull(m.time_within_target_range),
+      matching_function_mae: toNumberOrNull(m.matching_function_mae)
     }))
   },
 

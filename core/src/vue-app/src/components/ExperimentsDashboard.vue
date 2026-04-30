@@ -132,11 +132,13 @@ const groupedCharts = computed(() => {
 const hiddenSeries = ref(new Set())
 
 function toggleSeries(name) {
-  if (hiddenSeries.value.has(name)) {
-    hiddenSeries.value.delete(name)
+  const next = new Set(hiddenSeries.value)
+  if (next.has(name)) {
+    next.delete(name)
   } else {
-    hiddenSeries.value.add(name)
+    next.add(name)
   }
+  hiddenSeries.value = next
 }
 
 const pageIndex = ref(0)
@@ -175,6 +177,12 @@ function formatLabel(name) {
   return name
     ?.replace(/_/g, ' ')
     ?.replace(/\b\w/g, l => l.toUpperCase())
+}
+
+function rangeBadgeStyle(pct) {
+  const clamped = Math.min(100, Math.max(0, pct ?? 0))
+  const hue = (clamped / 100) * 120
+  return { background: `hsl(${hue}, 65%, 32%)` }
 }
 
 // ========================
@@ -217,35 +225,31 @@ function makeChartOptions(group, xAxisLabels, graphType) {
       },
     },
 
-    series: group.series.map(item => ({
-      name: item.name,
-      type: graphType,
-      showSymbol: false,
-      data: item.data,
-      font: '20px Arial',
-      lineStyle: {
-        width: 2,
-        color: getColor(item.name)
-      },
-
-      itemStyle: {
-        color: getColor(item.name)
-      },
-
-      // 🔥 hide if toggled
-      ...(hiddenSeries.value.has(item.name) && {
-        lineStyle: { opacity: 0 },
-        itemStyle: { opacity: 0 }
-      }),
-
-      markLine: item.target
-        ? {
-            symbol: ['none', 'none'],
-            lineStyle: { type: 'dashed', color: 'red' },
-            data: [{ yAxis: Number(item.target) }]
-          }
-        : undefined
-    }))
+    series: group.series.map(item => {
+      const hidden = hiddenSeries.value.has(item.name)
+      return {
+        name: item.name,
+        type: graphType,
+        showSymbol: false,
+        data: item.data,
+        lineStyle: {
+          width: 2,
+          color: getColor(item.name),
+          opacity: hidden ? 0 : 1
+        },
+        itemStyle: {
+          color: getColor(item.name),
+          opacity: hidden ? 0 : 1
+        },
+        markLine: item.target
+          ? {
+              symbol: ['none', 'none'],
+              lineStyle: { type: 'dashed', color: 'red' },
+              data: [{ yAxis: Number(item.target) }]
+            }
+          : undefined
+      }
+    })
   }
 }
 </script>
@@ -430,10 +434,21 @@ function makeChartOptions(group, xAxisLabels, graphType) {
                 <div class="metric-item"><span>Div</span><span>{{ formatNumber(m.divergence) }}</span></div>
                 <div class="metric-item"><span>Wobble</span><span>{{ formatNumber(m.wobble) }}</span></div>
                 <div class="metric-item">
-                  <span>% Range</span>
-                  <span class="badge success">
+                  <span>% in Range</span>
+                  <span class="badge success" :style="rangeBadgeStyle(m.percent_time_within_target_range)">
                     {{ formatNumber(m.percent_time_within_target_range) }}%
                   </span>
+                </div>
+              </div>
+
+              <div v-if="m.matching_function" class="matching-function-section">
+                <div class="metric-item">
+                  <span class="metric-label">Matching Fn</span>
+                  <span class="matching-fn-name">{{ m.matching_function }}</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">Matching MAE</span>
+                  <span class="metric-value">{{ formatNumber(m.matching_function_mae) }}</span>
                 </div>
               </div>
 
@@ -487,12 +502,22 @@ function makeChartOptions(group, xAxisLabels, graphType) {
 }
 
 /* ========================
+   CHARTS SECTION (scrollable column)
+======================== */
+.charts-section {
+  overflow-y: auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ========================
    DASHBOARD LAYOUT
 ======================== */
 .charts-layout {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  gap: 16px;
+  padding-bottom: 24px;
 }
 
 /* ========================
@@ -629,6 +654,8 @@ function makeChartOptions(group, xAxisLabels, graphType) {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* BLOCKS */
@@ -743,6 +770,21 @@ function makeChartOptions(group, xAxisLabels, graphType) {
   justify-content: space-between;
   font-size: 15px;
   color: #ccc;
+}
+
+.matching-function-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.matching-fn-name {
+  font-size: 13px;
+  color: #93add4;
+  font-style: italic;
 }
 
 /* ========================

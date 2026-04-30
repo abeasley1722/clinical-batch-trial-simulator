@@ -1,6 +1,6 @@
 // src/stores/simulationStore.js
 import { defineStore } from 'pinia'
-import { runSimulation, getRawCSVData } from '@/services/api'
+import { runSimulation, getRawCSVData, getBatchStatus } from '@/services/api'
 import router from '@/router'
 
 export const useSimulationStore = defineStore('simulation', {
@@ -32,6 +32,10 @@ export const useSimulationStore = defineStore('simulation', {
     total: 0,
     progress: 0,
     status: 'idle',
+    phase: 'running',
+    patientGenTotal: 0,
+    patientGenCompleted: 0,
+    patientGenProgress: 0,
     pollInterval: null
   }),
 
@@ -183,6 +187,7 @@ export const useSimulationStore = defineStore('simulation', {
 
           this.batchStatus = data
           this.status = data.status
+          this.phase = data.phase ?? 'running'
 
           this.completed = data.completed_jobs ?? 0
           this.total = data.total_jobs ?? 0
@@ -190,16 +195,28 @@ export const useSimulationStore = defineStore('simulation', {
             ? Math.round((this.completed / this.total) * 100)
             : 0
 
+          this.patientGenTotal = data.patient_gen_total ?? 0
+          this.patientGenCompleted = data.patient_gen_completed ?? 0
+          this.patientGenProgress = this.patientGenTotal > 0
+            ? Math.round((this.patientGenCompleted / this.patientGenTotal) * 100)
+            : 0
+
           if (data.status !== 'running') {
             clearInterval(this.pollInterval)
             this.pollInterval = null
+
+            if (data.status === 'completed') {
+              router.push('/results')
+            } else if (data.status === 'cancelled' || data.status === 'failed') {
+              router.push('/')
+            }
           }
         } catch (err) {
           console.error(err)
           clearInterval(this.pollInterval)
           this.pollInterval = null
         }
-      }, 2000)
+      }, 5000)
     },
 
     // =========================

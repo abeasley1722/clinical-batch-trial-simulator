@@ -1887,9 +1887,10 @@ def run_batch_thread(batch_id, batch):
 
     # Stabilize patients in parallel
     if generated_patients:
-        num_workers = batch.get('workers', None)
-        if num_workers is None:
+        num_workers = batch.get('workers') or None
+        if not num_workers:
             num_workers = max(1, (os.cpu_count() or 4) - 1)
+        num_workers = max(1, num_workers)
         print(f"\nStabilizing {len(generated_patients)} patients with {num_workers} workers...")
         print(f"Estimated time: {len(generated_patients) * 2.5 / num_workers:.0f}-{len(generated_patients) * 3.5 / num_workers:.0f} minutes\n")
         
@@ -1907,7 +1908,12 @@ def run_batch_thread(batch_id, batch):
         results = []
         completed = 0
         failed = 0
-        
+
+        with batch_lock:
+            batches[batch_id]['phase'] = 'generating_patients'
+            batches[batch_id]['patient_gen_total'] = len(generated_patients)
+            batches[batch_id]['patient_gen_completed'] = 0
+
         with ProcessPool(num_workers) as pool:
             for result in pool.imap_unordered(stabilize_patient, work_items):
                 completed += 1
@@ -1917,6 +1923,11 @@ def run_batch_thread(batch_id, batch):
                     failed += 1
                     print(f"  [{completed}/{len(generated_patients)}] FAIL {result['name']}: {result.get('message', 'Unknown error')}")
                 results.append(result)
+                with batch_lock:
+                    batches[batch_id]['patient_gen_completed'] = completed
+
+        with batch_lock:
+            batches[batch_id]['phase'] = 'running'
 
         #add generated patients to cohort
         for r in results:
@@ -1935,7 +1946,10 @@ def run_batch_thread(batch_id, batch):
     experiment = Experiment.from_json(batch, patients, batch_dir, batch_id)
     insert_experiment_from_object(experiment)
 
-    workers = batch.get('workers', max(1, (os.cpu_count() or 4) - 1))
+    workers = batch.get('workers') or None
+    if not workers:
+        workers = max(1, (os.cpu_count() or 4) - 1)
+    workers = max(1, workers)
     total_jobs = len(patients)
 
     if len(patients) == 0:
@@ -2110,7 +2124,7 @@ def run_batch_thread(batch_id, batch):
     #build dataframes for analysis
     dfs = []
     for path in completed_csv_paths:
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, low_memory=False)
 
         #round timestamps to nearest millisecond
         df['sim_time_s'] = df['sim_time_s'].round(3)
@@ -2133,7 +2147,7 @@ def run_batch_thread(batch_id, batch):
     update_experiment_from_object(experiment)
 
     #get controller start time
-    start_time_df = pd.read_csv(completed_csv_paths[0])
+    start_time_df = pd.read_csv(completed_csv_paths[0], low_memory=False)
     start_time_df['sim_time_s'] = start_time_df['sim_time_s'].round(3)
 
     #find first activation timestamp

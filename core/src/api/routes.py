@@ -273,10 +273,10 @@ def api_get_raw_csv_dataframe(experiment_id):
         ?selection=all
         ?selection=hr_bpm,spo2_pct
     """
-    print(f"Received request for raw CSV data of experiment {experiment_id} with query params: {request.args}")   
+    #print(f"Received request for raw CSV data of experiment {experiment_id} with query params: {request.args}")   
     # 🔥 Get selection from query params
     selection_param = request.args.get("selection")
-    print(f"Parsed selection param: {selection_param}")
+    #print(f"Parsed selection param: {selection_param}")
     if selection_param:
         selection = selection_param.split(",")
     else:
@@ -289,7 +289,7 @@ def api_get_raw_csv_dataframe(experiment_id):
     df = df.replace({np.nan: None})
 
     # 🔥 Debug (corrected)
-    print("Columns returned:", df.columns.tolist())
-    print(df.head())
+    #print("Columns returned:", df.columns.tolist())
+    #print(df.head())
 
     return jsonify(df.to_dict(orient='records'))

@@ -182,7 +182,7 @@ def get_raw_csv_dataframe(experiment_id, selection=None):
         return pd.DataFrame()
 
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path, low_memory=False)
 
         selected_columns = resolve_columns(selection)
 

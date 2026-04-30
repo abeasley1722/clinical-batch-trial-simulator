@@ -24,28 +24,41 @@ async function cancel() {
     <div class="status-row">
       <span class="label">Status</span>
       <span :class="['status', store.status]">
-        {{ store.status }}
+        {{ store.phase === 'generating_patients' ? 'Generating Patients' : store.status }}
       </span>
     </div>
 
-    <!-- PROGRESS BAR -->
-    <div class="progress-wrapper">
-      <div class="progress-bar">
-        <div
-          class="progress-fill"
-          :style="{ width: (store.progress || 0) + '%' }"
-        ></div>
+    <!-- PATIENT GENERATION BAR (only when generating) -->
+    <template v-if="store.phase === 'generating_patients' && store.patientGenTotal > 0">
+      <div class="phase-label">Patient Generation</div>
+      <div class="progress-wrapper">
+        <div class="progress-bar">
+          <div
+            class="progress-fill"
+            :style="{ width: store.patientGenProgress + '%' }"
+          ></div>
+        </div>
+        <div class="progress-text">
+          {{ store.patientGenCompleted }} / {{ store.patientGenTotal }} &mdash; {{ store.patientGenProgress }}%
+        </div>
       </div>
+    </template>
 
-      <div class="progress-text">
-        {{ store.progress ?? 0 }}%
+    <!-- SIMULATION PROGRESS BAR -->
+    <template v-if="store.phase !== 'generating_patients' || store.total > 0">
+      <div v-if="store.phase === 'generating_patients'" class="phase-label">Simulation</div>
+      <div class="progress-wrapper">
+        <div class="progress-bar">
+          <div
+            class="progress-fill"
+            :style="{ width: (store.progress || 0) + '%' }"
+          ></div>
+        </div>
+        <div class="progress-text">
+          {{ store.completed ?? 0 }} / {{ store.total ?? 0 }} &mdash; {{ store.progress ?? 0 }}%
+        </div>
       </div>
-    </div>
-
-    <!-- COUNTS -->
-    <div class="counts">
-      {{ store.completed ?? 0 }} / {{ store.total ?? 0 }}
-    </div>
+    </template>
 
     <!-- ACTION -->
     <div class="actions">
@@ -65,17 +78,25 @@ async function cancel() {
    PANEL
 ======================== */
 .panel {
-  background: #1a1a1a;
-  color: white;
-  padding: 15px;
-  border-radius: 12px;
+  color: #f3f6fb;
+  padding: 24px 22px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(170, 190, 220, 0.16);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
 }
 
 /* ========================
    TITLE
 ======================== */
 .title {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 /* ========================
@@ -84,11 +105,11 @@ async function cancel() {
 .status-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .label {
-  color: #bbb;
+  color: #b8c2d3;
 }
 
 .status {
@@ -96,57 +117,54 @@ async function cancel() {
   text-transform: capitalize;
 }
 
-/* 🔥 Status colors */
-.status.running {
-  color: #4da3ff;
-}
-
+.status.running  { color: #9fb5d6; }
 .status.complete,
-.status.completed {
-  color: #4caf50;
-}
-
-.status.failed {
-  color: #ff6b6b;
-}
-
-.status.cancelled {
-  color: #aaa;
-}
+.status.completed { color: #6fcf97; }
+.status.failed   { color: #eb5757; }
+.status.cancelled { color: #b8c2d3; }
 
 /* ========================
    PROGRESS
 ======================== */
+.phase-label {
+  font-size: 12px;
+  color: #b8c2d3;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .progress-wrapper {
   margin-bottom: 10px;
 }
 
 .progress-bar {
   width: 100%;
-  height: 18px;
-  background: #333;
-  border-radius: 10px;
+  height: 10px;
+  border-radius: 999px;
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4da3ff, #6dd5ed);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6e85aa 0%, #93add4 100%);
   transition: width 0.3s ease;
 }
 
 .progress-text {
   font-size: 13px;
-  color: #bbb;
-  margin-top: 4px;
+  color: #b8c2d3;
+  margin-top: 6px;
 }
 
 /* ========================
    COUNTS
 ======================== */
 .counts {
-  color: #bbb;
-  margin-bottom: 10px;
+  color: #b8c2d3;
+  margin-bottom: 12px;
 }
 
 /* ========================
@@ -158,20 +176,16 @@ async function cancel() {
 }
 
 .danger-btn {
-  background: #333;
-  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(170, 190, 220, 0.2);
   border-radius: 8px;
-  color: #ff6b6b;
-  padding: 8px 12px;
+  color: #eb5757;
+  padding: 6px 14px;
+  font-size: 13px;
   cursor: pointer;
-  transition: 0.2s;
+  transition: background 0.2s;
 }
 
-.danger-btn:hover {
-  background: #444;
-}
-
-.danger-btn:active {
-  background: #222;
-}
+.danger-btn:hover  { background: rgba(255, 255, 255, 0.1); }
+.danger-btn:active { background: rgba(255, 255, 255, 0.03); }
 </style>

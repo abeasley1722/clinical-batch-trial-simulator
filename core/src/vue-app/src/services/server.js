@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
-export const serverUrl = ref(`http://${window.location.hostname}:8080`)
+const hostname = window.location.hostname || 'localhost'
+export const serverUrl = ref(`http://${hostname}:8080`)
 export const connectionStatus = ref('disconnected') // 'disconnected' | 'connecting' | 'connected' | 'error'
 
 export async function connectToServer(url) {
