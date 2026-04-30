@@ -68,23 +68,32 @@ function addMetric() {
         {{ getLabel(key) }}
       </div>
 
-      <input
-        type="number"
-        v-model.number="metric.target_value"
-        placeholder="Target"
-      />
+      <div class="field">
+        <label>Target Value</label>
+        <input
+          type="number"
+          v-model.number="metric.target_value"
+          placeholder="Target"
+        />
+      </div>
 
-      <input
-        type="number"
-        min="0"
-        v-model.number="metric.tolerance"
-        placeholder="Tolerance"
-      />
+      <div class="field">
+        <label>Tolerance</label>
+        <input
+          type="number"
+          min="0"
+          v-model.number="metric.tolerance"
+          placeholder="Tolerance"
+        />
+      </div>
 
-      <input
-        v-model="metric.matching_function"
-        placeholder="Match Function"
-      />
+      <div class="field">
+        <label>Matching Function</label>
+        <input
+          v-model="metric.matching_function"
+          placeholder="Match Function"
+        />
+      </div>
 
       <button class="icon-btn" @click="store.removeTargetMetric(key)">
         ✖
@@ -138,6 +147,20 @@ function addMetric() {
   min-width: 150px;
   color: #bbb;
   font-weight: 500;
+}
+
+/* ========================
+   FIELD (LABEL + INPUT STACK)
+======================== */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  font-size: 11px;
+  color: #bbb;
 }
 
 /* ========================

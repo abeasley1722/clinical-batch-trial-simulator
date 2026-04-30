@@ -1,20 +1,23 @@
 <template>
   <div class="panel">
     <h3 class="title">Batch Setup</h3>
-
     <div class="row">
-      <input v-model="store.name" placeholder="Batch Name" />
-
-      <input v-model.number="store.duration" type="number" placeholder="Duration (s)" />
-      <input v-model.number="store.workers" type="number" placeholder="Workers" />
-      <input v-model.number="store.replicates" type="number" placeholder="Replicates" />
+      <div class="field">
+        <label>Batch Name</label>
+        <input v-model="store.name" placeholder="Batch Name" />
+      </div>
+      <div class="field">
+        <label>Duration (s)</label>
+        <input v-model.number="store.duration" type="number" placeholder="Duration (s)" />
+      </div>
+      <div class="field">
+        <label>Workers</label>
+        <input v-model.number="store.workers" type="number" placeholder="Workers" />
+      </div>
     </div>
-
     <h4 class="section-title">Patient Count</h4>
     <input v-model.number="store.patientCount" type="number" />
-
     <h4 class="section-title">Demographics</h4>
-
     <div v-for="(demo, i) in store.demographics" :key="i" class="row">
       <select v-model="demo.name">
         <option disabled value="">Select Patient</option>
@@ -22,12 +25,9 @@
           {{ p }}
         </option>
       </select>
-
       <input type="number" v-model.number="demo.percent" placeholder="%" />
-
       <button class="icon-btn" @click="store.removeDemographic(i)">✖</button>
     </div>
-
     <button class="exp-btn add-btn" @click="store.demographics.push({ name: '', percent: 0 })">
       + Add Demographic
     </button>
@@ -37,8 +37,7 @@
 <script setup>
 import { useSimulationStore } from '@/stores/simulationStore'
 const store = useSimulationStore()
-
-const patients = ['soldier', 'adult', 'StandardMale', 'StandardFemale']
+const patients = ['soldier', 'adult']
 </script>
 
 <style scoped>
@@ -51,20 +50,17 @@ const patients = ['soldier', 'adult', 'StandardMale', 'StandardFemale']
   padding: 15px;
   border-radius: 12px;
 }
-
 /* ========================
    HEADINGS
 ======================== */
 .title {
   margin-bottom: 10px;
 }
-
 .section-title {
   margin-top: 15px;
   margin-bottom: 5px;
   color: #bbb;
 }
-
 /* ========================
    ROW LAYOUT
 ======================== */
@@ -74,7 +70,18 @@ const patients = ['soldier', 'adult', 'StandardMale', 'StandardFemale']
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
-
+/* ========================
+   FIELD (LABEL + INPUT STACK)
+======================== */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field label {
+  font-size: 11px;
+  color: #bbb;
+}
 /* ========================
    INPUTS (MATCH DARK THEME)
 ======================== */
@@ -87,12 +94,10 @@ select {
   color: white;
   outline: none;
 }
-
 /* placeholder styling */
 input::placeholder {
   color: #bbb;
 }
-
 /* ========================
    BUTTONS (REUSE exp-btn)
 ======================== */
@@ -105,15 +110,12 @@ input::placeholder {
   cursor: pointer;
   transition: all 0.2s ease;
 }
-
 .exp-btn:hover {
   background: #444;
 }
-
 .exp-btn:active {
   background: #222;
 }
-
 /* ========================
    SMALL ICON BUTTON
 ======================== */
@@ -125,11 +127,9 @@ input::placeholder {
   padding: 6px 10px;
   cursor: pointer;
 }
-
 .icon-btn:hover {
   background: #555;
 }
-
 /* ========================
    ADD BUTTON
 ======================== */

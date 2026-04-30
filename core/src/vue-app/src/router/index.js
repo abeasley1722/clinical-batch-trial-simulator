@@ -5,12 +5,11 @@ import BatchPatient from '@/views/BatchPatient.vue'
 import Results from '@/views/Results.vue'
 
 export default createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     { path: '/', component: Home },
     { path: '/batch', component: BatchPatient },
     {path: '/loading', component: LoadingScreen},
     { path: '/results', component: Results },
-
   ]
 })
