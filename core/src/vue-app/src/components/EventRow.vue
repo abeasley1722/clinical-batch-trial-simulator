@@ -116,7 +116,7 @@ function formatType(type) {
   justify-content: space-between;
   align-items: center;
 
-  background: #222;
+  background: #2b3545;
   padding: 10px 12px;
   margin-bottom: 8px;
   border-radius: 8px;

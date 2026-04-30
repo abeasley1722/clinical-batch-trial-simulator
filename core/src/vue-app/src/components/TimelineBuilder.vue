@@ -62,7 +62,7 @@ const store = useSimulationStore()
    PANEL (MATCH DASHBOARD)
 ======================== */
 .panel {
-  background: #1a1a1a;
+  background: #1c2431;
   color: white;
   padding: 15px;
   border-radius: 12px;

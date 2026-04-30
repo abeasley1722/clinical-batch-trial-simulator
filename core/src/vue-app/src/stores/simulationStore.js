@@ -1,5 +1,7 @@
+// src/stores/simulationStore.js
 import { defineStore } from 'pinia'
-import { runSimulation, getBatchStatus } from '@/services/api'
+import { runSimulation, getRawCSVData } from '@/services/api'
+import router from '@/router'
 
 export const useSimulationStore = defineStore('simulation', {
   state: () => ({
@@ -9,14 +11,12 @@ export const useSimulationStore = defineStore('simulation', {
 
     workers: 4,
     replicates: 1,
-
     patientCount: 8,
 
     demographics: [
       { name: 'soldier', percent: 50 },
       { name: 'adult', percent: 50 }
     ],
-
 
     targetMetrics: {},
 
@@ -36,7 +36,7 @@ export const useSimulationStore = defineStore('simulation', {
 
   actions: {
     // =========================
-    // TARGET METRICS (FIXED)
+    // TARGET METRICS
     // =========================
     addTargetMetric(key) {
       if (this.targetMetrics[key]) return
@@ -87,7 +87,7 @@ export const useSimulationStore = defineStore('simulation', {
     },
 
     // =========================
-    // BUILD PAYLOAD (FINAL STRUCTURE)
+    // BUILD PAYLOAD
     // =========================
     buildPayload() {
       return {
@@ -142,6 +142,8 @@ export const useSimulationStore = defineStore('simulation', {
         this.validatePayload()
         this.status = 'submitting'
 
+        router.push('/loading')
+
         const payload = this.buildPayload()
         console.log('SENDING:\n', JSON.stringify(payload, null, 2))
 
@@ -150,54 +152,68 @@ export const useSimulationStore = defineStore('simulation', {
         this.batchId = res.batch_id
 
         if (!this.batchId) {
-          throw new Error("batch_id missing from backend")
+          throw new Error('batch_id missing from backend')
         }
-        this.status = 'running'
 
+        this.status = 'running'
         this.startPolling()
+
       } catch (err) {
         console.error(err)
         this.status = 'error'
+        router.push('/')
         alert(err.message)
       }
     },
 
     // =========================
-    // POLLING (PROGRESS)
+    // POLLING (FIXED)
     // =========================
     startPolling() {
       if (!this.batchId) return
 
-      // clear old interval if exists
       if (this.pollInterval) {
         clearInterval(this.pollInterval)
       }
 
-      this.pollInterval = setInterval(async () => {
-        try {
-          const data = await getBatchStatus(this.batchId)
+      this.status = 'polling'
 
-          this.batchStatus = data
-          this.status = data.status
+     this.pollInterval = setInterval(async () => {
+      try {
+        const data = await getRawCSVData(this.batchId)
 
-          this.completed = data.completed ?? 0
-          this.total = data.total ?? 0
-          this.progress = data.progress ?? 0
+        // normalize → always array
+        const rows = Array.isArray(data) ? data : []
 
-          if (data.status !== 'running') {
-            clearInterval(this.pollInterval)
-            this.pollInterval = null
-          }
-        } catch (err) {
-          console.error(err)
+        this.batchStatus = rows
+
+        // ✅ completion condition
+        if (rows.length > 0) {
+          console.log('✅ Data received → complete')
+
+          this.progress = 100
+          this.status = 'completed'
+
           clearInterval(this.pollInterval)
           this.pollInterval = null
+
+          router.push('/results')
         }
-      }, 30000)
+
+      } catch (err) {
+        console.error(err)
+
+        clearInterval(this.pollInterval)
+        this.pollInterval = null
+
+        this.status = 'error'
+        router.push('/')
+      }
+    }, 30000)
     },
 
     // =========================
-    // RESET (optional but useful)
+    // RESET
     // =========================
     reset() {
       this.batchId = null

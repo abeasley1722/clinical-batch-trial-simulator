@@ -28,7 +28,7 @@ defineProps({
 }
 
 .popup {
-  background: white;
+  background: #01101f;
   padding: 30px 40px;
   border-radius: 12px;
   text-align: center;

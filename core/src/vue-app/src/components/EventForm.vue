@@ -1,3 +1,4 @@
+<!-- src/components/AddEventForm.vue -->
 <script setup>
 import { reactive, ref } from 'vue'
 
@@ -21,8 +22,14 @@ const params = reactive({
   severity: 0.5,
 
   compartment: 'RightLeg',
-  rate: 100,
+  rate_mode: 'absolute',
+  flow_rate: 100,
   total_volume: 500,
+  stop_mode: 'fixed',
+  condition_vital: 'hr_bpm',
+  condition_operator: '>=',
+  condition_value: 120,
+  max_duration: 10,
 
   intubation: 'Tracheal',
 
@@ -37,7 +44,11 @@ const params = reactive({
   http_url: 'http://localhost:5001',
   timeout: 10,
   config: '',
-  fluid_controller: 'default_fluid_controller',
+
+  fluid_controller: 'standard_resuscitation',
+  fluid_http_url: 'http://localhost:5001/fluid',
+  fluid_timeout: 5,
+  fluid_config: '',
 
   drug: 'Epinephrine',
   dose: 1,
@@ -58,470 +69,582 @@ const params = reactive({
 function submit(e) {
   e.preventDefault()
 
-  let event = {
-  activation: activation.value,
-  type: type.value
-}
+  const event = {
+    activation: activation.value,
+    type: type.value
+  }
 
-// ========================
-// ACTIVATION
-// ========================
-if (activation.value === 'time') {
-  event.time = time.value
-} else {
-  event.trigger = { ...trigger }
-}
+  if (activation.value === 'time') {
+    event.time = time.value
+  } else {
+    event.trigger = { ...trigger }
+  }
 
-// ========================
-// EVENT TYPES
-// ========================
-switch (type.value) {
+  switch (type.value) {
+    case 'pathology':
+      event.pathology = params.pathology
+      event.severity = params.severity
 
-  case 'pathology':
-    event.pathology = params.pathology
-    event.severity = params.severity
-    break
+      if (params.pathology === 'Hemorrhage') {
+        event.compartment = params.compartment
+        event.rate_mode = params.rate_mode
+        event.total_volume = params.total_volume
+        event.flow_rate = params.flow_rate
+        event.duration = params.duration
+        event.duration_unit = params.duration_unit
+        event.stop_mode = params.stop_mode
 
-  case 'intubate':
-    event.intubationType = params.intubation
-    break
+        if (params.stop_mode === 'conditional') {
+          event.condition_vital = params.condition_vital
+          event.condition_operator = params.condition_operator
+          event.condition_value = params.condition_value
+          event.max_duration = params.max_duration
+        }
+      } else {
+        event.condition_vital = params.condition_vital
+        event.condition_operator = params.condition_operator
+        event.condition_value = params.condition_value
+        event.max_duration = params.max_duration
+      }
+      break
 
-  case 'start_vent':
-  case 'change_vent':
-    event.vent_settings = {
-      mode: params.mode,
-      fio2: params.fio2,
-      peep_cmh2o: params.peep,
-      vt_ml: params.vt,
-      rr: params.rr,
-      itime_s: params.itime
-    }
-    break
+    case 'intubate':
+      event.intubationType = params.intubation
+      break
 
-  // ========================
-  // 🔥 CONTROLLER (MATCHES BACKEND EXACTLY)
-  // ========================
-  case 'start_controller':
-    event.controller = params.controller
+    case 'start_vent':
+    case 'change_vent':
+      event.vent_settings = {
+        mode: params.mode,
+        fio2: params.fio2,
+        peep_cmh2o: params.peep,
+        vt_ml: params.vt,
+        rr: params.rr,
+        itime_s: params.itime
+      }
+      break
 
-    if (params.controller === 'http_controller') {
-      event.http_url = params.http_url || 'http://localhost:5001'
-      event.http_timeout = params.timeout || 10
+    case 'start_controller':
+      event.controller = params.controller
 
-      if (params.config) {
-        try {
-          event.http_config =
-            typeof params.config === 'string'
-              ? JSON.parse(params.config)
-              : params.config
-        } catch (err) {
-          console.warn('Invalid JSON config')
+      if (params.controller === 'http_controller') {
+        event.http_url = params.http_url || 'http://localhost:5001'
+        event.http_timeout = params.timeout || 10
+
+        if (params.config) {
+          try {
+            event.http_config =
+              typeof params.config === 'string'
+                ? JSON.parse(params.config)
+                : params.config
+          } catch {
+            console.warn('Invalid JSON config')
+          }
         }
       }
-    }
-    break
+      break
 
-  // ========================
-  // FLUID CONTROLLER
-  // ========================
-  case 'start_fluid_controller':
-    event.controller = params.fluid_controller
+    case 'start_fluid_controller':
+      event.controller = params.fluid_controller
 
-    if (params.fluid_controller === 'http_fluid_controller') {
-      event.http_url = params.fluid_http_url || 'http://localhost:5001/fluid'
-      event.timeout = params.fluid_timeout || 5
+      if (params.fluid_controller === 'http_fluid_controller') {
+        event.http_url = params.fluid_http_url || 'http://localhost:5001/fluid'
+        event.timeout = params.fluid_timeout || 5
 
-      if (params.fluid_config) {
-        try {
-          event.config =
-            typeof params.fluid_config === 'string'
-              ? JSON.parse(params.fluid_config)
-              : params.fluid_config
-        } catch (err) {
-          console.warn('Invalid JSON config')
+        if (params.fluid_config) {
+          try {
+            event.config =
+              typeof params.fluid_config === 'string'
+                ? JSON.parse(params.fluid_config)
+                : params.fluid_config
+          } catch {
+            console.warn('Invalid JSON config')
+          }
         }
       }
-    }
-    break
+      break
 
-  case 'stop_fluid_controller':
-    break
+    case 'stop_fluid_controller':
+      break
 
-  // ========================
-  // MEDICATIONS
-  // ========================
-  case 'bolus':
-    event.drug = params.drug
-    event.dose = params.dose
-    event.route = params.route
-    break
+    case 'bolus':
+      event.drug = params.drug
+      event.dose = params.dose
+      event.route = params.route
+      break
 
-  case 'infusion':
-    event.drug = params.drug
-    event.rate_ml_per_hr = params.infusion_rate
-    event.concentration = params.concentration
-    break
+    case 'infusion':
+      event.drug = params.drug
+      event.rate_ml_per_hr = params.infusion_rate
+      event.concentration = params.concentration
+      break
 
-  case 'compound_infusion':
-    event.compound = params.fluid
-    event.rate_ml_per_min = params.compound_rate
-    event.bag_volume_mL = params.bag_volume
-    break
+    case 'compound_infusion':
+      event.compound = params.fluid
+      event.rate_ml_per_min = params.compound_rate
+      event.bag_volume_mL = params.bag_volume
+      break
 
-  // ========================
-  // EXERCISE
-  // ========================
-  case 'exercise':
-    event.intensity = params.intensity
-    event.duration = params.duration
-    event.unit = params.duration_unit
-    break
-}
-  console.log("FINAL EVENT:", JSON.stringify(event, null, 2))
+    case 'exercise':
+      event.intensity = params.intensity
+      event.duration = params.duration
+      event.unit = params.duration_unit
+      break
+  }
+
+  console.log('FINAL EVENT:', JSON.stringify(event, null, 2))
   emit('add', event)
 }
 </script>
 
 <template>
   <form @submit="submit" class="panel">
+    <h3 class="title">Add Event</h3>
 
-  <h3 class="title">Add Event</h3>
+    <div class="section">
+      <div class="label">Activation</div>
 
-  <!-- Activation -->
-  <div class="section">
-    <div class="label">Activation</div>
+      <div class="field-group">
+        <label class="field">
+          <span class="field-label">Activation Mode</span>
+          <select v-model="activation">
+            <option value="time">⏱ Time</option>
+            <option value="trigger">🎯 Trigger</option>
+          </select>
+        </label>
 
-    <div class="row">
-      <select v-model="activation">
-        <option value="time">⏱ Time</option>
-        <option value="trigger">🎯 Trigger</option>
-      </select>
-
-      <input
-        v-if="activation==='time'"
-        v-model.number="time"
-        type="number"
-        placeholder="Time (s)"
-      />
-    </div>
-  </div>
-
-  <!-- Trigger -->
-  <div v-if="activation==='trigger'" class="section">
-    <div class="label">Trigger Condition</div>
-
-    <div class="row">
-      <select v-model="trigger.vital">
-        <option value="map_mmhg">MAP</option>
-        <option value="hr_bpm">HR</option>
-        <option value="spo2_pct">SpO2</option>
-      </select>
-
-      <select v-model="trigger.operator">
-        <option value="<=">≤</option>
-        <option value=">=">≥</option>
-      </select>
-
-      <input v-model.number="trigger.value" type="number" />
-    </div>
-  </div>
-
-  <!-- Type -->
-  <div class="section">
-    <div class="label">Event Type</div>
-
-    <select v-model="type">
-      <option value="pathology">Pathology</option>
-      <option value="intubate">Intubate</option>
-      <option value="start_vent">Start Vent</option>
-      <option value="change_vent">Change Vent</option>
-      <option value="start_controller">Controller</option>
-      <option value="start_fluid_controller">Start Fluid Controller</option>
-      <option value="stop_fluid_controller">Stop Fluid Controller</option>
-      <option value="bolus">Drug Bolus</option>
-      <option value="infusion">Drug Infusion</option>
-      <option value="compound_infusion">Fluid/Blood Infusion</option>
-      <option value="exercise">Exercise</option>
-    </select>
-  </div>
-
-  <!-- Dynamic Params -->
-  <div class="section">
-
-    <!-- Dynamic Params -->
-<div class="section">
-
-      <!-- ========================= -->
-      <!-- PATHOLOGY -->
-      <!-- ========================= -->
-      <div v-if="type==='pathology'" class="section">
-      <!-- Pathology Type -->
-      <div class="row">
-        <select v-model="params.pathology">
-          <option value="ARDS">ARDS (Acute Respiratory Distress)</option>
-          <option value="AirwayObstruction">Airway Obstruction</option>
-          <option value="AcuteStress">Acute Stress Response</option>
-          <option value="Hemorrhage">Hemorrhage</option>
-        </select>
+        <label v-if="activation === 'time'" class="field">
+          <span class="field-label">Time (seconds)</span>
+          <input v-model.number="time" type="number" min="0" />
+        </label>
       </div>
-       <!-- ========================= -->
-      <!-- HEMORRHAGE OPTIONS -->
-      <!-- ========================= -->
-      <div v-if="params.pathology === 'Hemorrhage'" class="section">
+    </div>
 
-        <!-- Location -->
-        <div class="row">
-          <select v-model="params.compartment">
-            <option value="RightLeg">Right Leg (≤150 mL/min)</option>
-            <option value="LeftLeg">Left Leg (≤150 mL/min)</option>
-            <option value="RightArm">Right Arm (≤100 mL/min)</option>
-            <option value="LeftArm">Left Arm (≤100 mL/min)</option>
-            <option value="Aorta">Aorta (high volume)</option>
-            <option value="VenaCava">Vena Cava (high volume)</option>
+    <div v-if="activation === 'trigger'" class="section">
+      <div class="label">Trigger Condition</div>
+
+      <div class="field-group">
+        <label class="field">
+          <span class="field-label">Vital</span>
+          <select v-model="trigger.vital">
+            <option value="map_mmhg">MAP</option>
+            <option value="hr_bpm">HR</option>
+            <option value="spo2_pct">SpO2</option>
           </select>
-        </div>
+        </label>
 
-        <!-- Rate Mode -->
-        <div class="row">
-          <select v-model="params.rate_mode">
-            <option value="absolute">mL/min (absolute)</option>
-            <option value="percent_bv">% BV/min(Relative)</option>
-          </select>
-        </div>
-
-        <!-- Core Inputs -->
-        <div class="row">
-          <input v-model.number="params.total_volume" placeholder="Total Volume (mL)" />
-          <input v-model.number="params.flow_rate" placeholder="Flow Rate" />
-          <input v-model.number="params.duration" placeholder="Duration" />
-          <select v-model="params.duration_unit">
-            <option value="min">min</option>
-            <option value="sec">sec</option>
-            <option value="hr">hr</option>
-          </select>
-        </div>
-
-        <!-- Stop Mode -->
-        <div class="row">
-          <select v-model="params.stop_mode">
-            <option value="fixed">Fixed (use seperate stop event)</option>
-            <option value="conditional">Stop When Condition Met</option>
-          </select>
-        </div>
-
-        <!-- Conditional Stop -->
-        <div v-if="params.stop_mode==='conditional'" class="row">
-          <select v-model="params.condition_vital">
-            <option value="hr_bpm">Heart Rate (bpm)</option>
-            <option value="map_mmhg">MAP (mmHg)</option>
-            <option value="sbp_mmhg">SBP (mmHg)</option>
-            <option value="spo2_percent">SpO₂ (%)</option>
-            <option value="lactate_mmolL">Lactate (mmol/L)</option>
-          </select>
-
-          <select v-model="params.condition_operator">
-            <option value=">=">≥</option>
+        <label class="field">
+          <span class="field-label">Operator</span>
+          <select v-model="trigger.operator">
             <option value="<=">≤</option>
+            <option value=">=">≥</option>
           </select>
+        </label>
 
-          <input v-model.number="params.condition_value" placeholder="Threshold" />
-          <input v-model.number="params.max_duration" placeholder="Max Duration (min)" />
+        <label class="field">
+          <span class="field-label">Threshold</span>
+          <input v-model.number="trigger.value" type="number" />
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="label">Event Type</div>
+
+      <label class="field">
+        <span class="field-label">Type</span>
+        <select v-model="type">
+          <option value="pathology">Pathology</option>
+          <option value="intubate">Intubate</option>
+          <option value="start_vent">Start Vent</option>
+          <option value="change_vent">Change Vent</option>
+          <option value="start_controller">Controller</option>
+          <option value="start_fluid_controller">Start Fluid Controller</option>
+          <option value="stop_fluid_controller">Stop Fluid Controller</option>
+          <option value="bolus">Drug Bolus</option>
+          <option value="infusion">Drug Infusion</option>
+          <option value="compound_infusion">Fluid/Blood Infusion</option>
+          <option value="exercise">Exercise</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="section">
+      <div class="label">Parameters</div>
+
+      <template v-if="type === 'pathology'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Pathology</span>
+            <select v-model="params.pathology">
+              <option value="ARDS">ARDS (Acute Respiratory Distress)</option>
+              <option value="AirwayObstruction">Airway Obstruction</option>
+              <option value="AcuteStress">Acute Stress Response</option>
+              <option value="Hemorrhage">Hemorrhage</option>
+            </select>
+          </label>
         </div>
 
-      </div>
+        <div v-if="params.pathology === 'Hemorrhage'" class="subsection">
+          <div class="field-group">
+            <label class="field">
+              <span class="field-label">Bleed Location</span>
+              <select v-model="params.compartment">
+                <option value="RightLeg">Right Leg (≤150 mL/min)</option>
+                <option value="LeftLeg">Left Leg (≤150 mL/min)</option>
+                <option value="RightArm">Right Arm (≤100 mL/min)</option>
+                <option value="LeftArm">Left Arm (≤100 mL/min)</option>
+                <option value="Aorta">Aorta (high volume)</option>
+                <option value="VenaCava">Vena Cava (high volume)</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">Rate Mode</span>
+              <select v-model="params.rate_mode">
+                <option value="absolute">mL/min (absolute)</option>
+                <option value="percent_bv">% BV/min (relative)</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-group">
+            <label class="field">
+              <span class="field-label">Total Volume (mL)</span>
+              <input v-model.number="params.total_volume" type="number" min="0" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Flow Rate</span>
+              <input v-model.number="params.flow_rate" type="number" min="0" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Duration</span>
+              <input v-model.number="params.duration" type="number" min="0" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Duration Unit</span>
+              <select v-model="params.duration_unit">
+                <option value="min">min</option>
+                <option value="sec">sec</option>
+                <option value="hr">hr</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-group">
+            <label class="field">
+              <span class="field-label">Stop Mode</span>
+              <select v-model="params.stop_mode">
+                <option value="fixed">Fixed (use separate stop event)</option>
+                <option value="conditional">Stop When Condition Met</option>
+              </select>
+            </label>
+          </div>
+
+          <div v-if="params.stop_mode === 'conditional'" class="field-group">
+            <label class="field">
+              <span class="field-label">Condition Vital</span>
+              <select v-model="params.condition_vital">
+                <option value="hr_bpm">Heart Rate (bpm)</option>
+                <option value="map_mmhg">MAP (mmHg)</option>
+                <option value="sbp_mmhg">SBP (mmHg)</option>
+                <option value="spo2_percent">SpO₂ (%)</option>
+                <option value="lactate_mmolL">Lactate (mmol/L)</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">Condition Operator</span>
+              <select v-model="params.condition_operator">
+                <option value=">=">≥</option>
+                <option value="<=">≤</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">Condition Threshold</span>
+              <input v-model.number="params.condition_value" type="number" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Max Duration (min)</span>
+              <input v-model.number="params.max_duration" type="number" min="0" />
+            </label>
+          </div>
+        </div>
+
+        <div v-else class="subsection">
+          <div class="field-group">
+            <label class="field">
+              <span class="field-label">Severity (0–1)</span>
+              <input
+                v-model.number="params.severity"
+                type="number"
+                min="0"
+                max="1"
+                step="0.1"
+              />
+            </label>
+          </div>
+
+          <div class="field-group">
+            <label class="field">
+              <span class="field-label">Stop Condition Vital</span>
+              <select v-model="params.condition_vital">
+                <option value="hr_bpm">Heart Rate (bpm)</option>
+                <option value="map_mmhg">MAP (mmHg)</option>
+                <option value="sbp_mmhg">Systolic BP</option>
+                <option value="dbp_mmhg">Diastolic BP</option>
+                <option value="spo2_pct">SpO₂ (%)</option>
+                <option value="co_lpm">Cardiac Output</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">Stop Condition Operator</span>
+              <select v-model="params.condition_operator">
+                <option value=">=">≥</option>
+                <option value="<=">≤</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">Threshold</span>
+              <input v-model.number="params.condition_value" type="number" />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Max Duration (min)</span>
+              <input v-model.number="params.max_duration" type="number" min="0" />
+            </label>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="type === 'intubate'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Intubation Type</span>
+            <select v-model="params.intubation">
+              <optgroup label="Endotracheal">
+                <option value="Tracheal">Tracheal (standard ETT)</option>
+                <option value="RightMainstem">Right Mainstem (one-lung)</option>
+                <option value="LeftMainstem">Left Mainstem (one-lung)</option>
+              </optgroup>
+
+              <optgroup label="Airway Adjuncts">
+                <option value="Oropharyngeal">Oropharyngeal (OPA)</option>
+                <option value="Nasopharyngeal">Nasopharyngeal (NPA)</option>
+              </optgroup>
+
+              <optgroup label="Misplacement">
+                <option value="Esophageal">Esophageal (misplaced!)</option>
+              </optgroup>
+            </select>
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'start_vent' || type === 'change_vent'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Mode</span>
+            <input v-model="params.mode" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">FiO2 (%)</span>
+            <input v-model.number="params.fio2" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">PEEP (cmH2O)</span>
+            <input v-model.number="params.peep" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">VT (mL)</span>
+            <input v-model.number="params.vt" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">RR (breaths/min)</span>
+            <input v-model.number="params.rr" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">I-Time (s)</span>
+            <input v-model.number="params.itime" type="number" min="0" step="0.1" />
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'start_controller'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Vent Controller</span>
+            <select v-model="params.controller">
+              <option value="default_controller">Simple FiO₂</option>
+              <option value="ardsnet_controller">ARDSNet</option>
+              <option value="adaptive_controller">Adaptive</option>
+              <option value="random_walk_controller">Random Walk</option>
+              <option value="http_controller">🌐 HTTP Controller</option>
+            </select>
+          </label>
+        </div>
+
+        <div
+          v-if="params.controller === 'http_controller'"
+          class="field-group"
+        >
+          <label class="field">
+            <span class="field-label">Controller URL</span>
+            <input v-model="params.http_url" type="url" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Timeout (s)</span>
+            <input v-model.number="params.timeout" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">JSON Config</span>
+            <input v-model="params.config" />
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'start_fluid_controller'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Fluid Controller</span>
+            <select v-model="params.fluid_controller">
+              <option value="standard_resuscitation">Standard Resuscitation (MAP 65–75)</option>
+              <option value="aggressive_resuscitation">Aggressive Resuscitation</option>
+              <option value="permissive_hypotension">Permissive Hypotension</option>
+              <option value="damage_control">Damage Control</option>
+              <option value="http_fluid_controller">🌐 HTTP Controller</option>
+            </select>
+          </label>
+        </div>
+
+        <div
+          v-if="params.fluid_controller === 'http_fluid_controller'"
+          class="field-group"
+        >
+          <label class="field">
+            <span class="field-label">Fluid Controller URL</span>
+            <input v-model="params.fluid_http_url" type="url" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Timeout (s)</span>
+            <input v-model.number="params.fluid_timeout" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">JSON Config</span>
+            <input v-model="params.fluid_config" />
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'bolus'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Drug</span>
+            <input v-model="params.drug" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Dose</span>
+            <input v-model.number="params.dose" type="number" min="0" step="any" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Route</span>
+            <select v-model="params.route">
+              <option value="IV">IV</option>
+              <option value="IM">IM</option>
+              <option value="Subcutaneous">Subcutaneous</option>
+            </select>
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'infusion'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Drug</span>
+            <input v-model="params.drug" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Rate (mL/hr)</span>
+            <input v-model.number="params.infusion_rate" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Concentration</span>
+            <input v-model.number="params.concentration" type="number" min="0" step="any" />
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'compound_infusion'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Fluid / Compound</span>
+            <select v-model="params.fluid">
+              <option value="Saline">Saline</option>
+              <option value="Blood">Blood</option>
+              <option value="Plasma">Plasma</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Rate (mL/min)</span>
+            <input v-model.number="params.compound_rate" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Bag Volume (mL)</span>
+            <input v-model.number="params.bag_volume" type="number" min="0" />
+          </label>
+        </div>
+      </template>
+
+      <template v-if="type === 'exercise'">
+        <div class="field-group">
+          <label class="field">
+            <span class="field-label">Intensity (0–1)</span>
+            <input v-model.number="params.intensity" type="number" min="0" max="1" step="0.1" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Duration</span>
+            <input v-model.number="params.duration" type="number" min="0" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Duration Unit</span>
+            <select v-model="params.duration_unit">
+              <option value="s">Seconds</option>
+              <option value="min">Minutes</option>
+            </select>
+          </label>
+        </div>
+      </template>
     </div>
 
-  <!-- ========================= -->
-  <!-- DEFAULT (non-hemorrhage) -->
-  <!-- ========================= -->
-  <div v-if="params.pathology !== 'Hemorrhage'" class="section">
-
-    <!-- Severity -->
-    <div class="row">
-      <input
-        v-model.number="params.severity"
-        type="number"
-        min="0"
-        max="1"
-        step="0.1"
-        placeholder="Severity (0–1)"
-      />
-    </div>
-
-    <!-- ========================= -->
-    <!-- STOP WHEN CONDITION -->
-    <!-- ========================= -->
-    <div v-if="params.pathology !== 'Hemorrhage'" class="row">
-
-      <!-- Vital -->
-      <select v-model="params.condition_vital">
-        <option value="hr_bpm">Heart Rate (bpm)</option>
-        <option value="map_mmhg">MAP (mmHg)</option>
-        <option value="sbp_mmhg">Systolic BP</option>
-        <option value="dbp_mmhg">Diastolic BP</option>
-        <option value="spo2_pct">SpO₂ (%)</option>
-        <option value="co_lpm">Cardiac Output</option>
-      </select>
-
-      <!-- Operator -->
-      <select v-model="params.condition_operator">
-        <option value=">=">≥</option>
-        <option value="<=">≤</option>
-        <option value=">">></option>
-        <option value="<"><</option>
-      </select>
-
-      <!-- Threshold -->
-      <input
-        v-model.number="params.condition_value"
-        type="number"
-        placeholder="Threshold"
-      />
-
-      <!-- Safety cap -->
-      <input
-        v-model.number="params.max_duration"
-        type="number"
-        placeholder="Max Duration (min)"
-      />
-
-    </div>
-
-  </div>
-
-      <!-- ========================= -->
-      <!-- INTUBATE -->
-      <!-- ========================= -->
-      <div v-if="type==='intubate'" class="row">
-      <select v-model="params.intubation">
-
-        <!-- Endotracheal -->
-        <optgroup label="Endotracheal">
-          <option value="Tracheal">Tracheal (standard ETT)</option>
-          <option value="RightMainstem">Right Mainstem (one-lung)</option>
-          <option value="LeftMainstem">Left Mainstem (one-lung)</option>
-        </optgroup>
-
-        <!-- Airway Adjuncts -->
-        <optgroup label="Airway Adjuncts">
-          <option value="Oropharyngeal">Oropharyngeal (OPA)</option>
-          <option value="Nasopharyngeal">Nasopharyngeal (NPA)</option>
-        </optgroup>
-
-        <!-- Misplacement -->
-        <optgroup label="Misplacement">
-          <option value="Esophageal">Esophageal (misplaced!)</option>
-        </optgroup>
-
-      </select>
-    </div>
-
-      <!-- ========================= -->
-      <!-- VENT -->
-      <!-- ========================= -->
-      <div v-if="type==='start_vent' || type==='change_vent'" class="row">
-        <input v-model="params.mode" placeholder="Mode (VC-AC)" />
-        <input v-model.number="params.fio2" placeholder="FiO2 (%)" />
-        <input v-model.number="params.peep" placeholder="PEEP (cmH2O)" />
-        <input v-model.number="params.vt" placeholder="VT (mL)" />
-        <input v-model.number="params.rr" placeholder="RR (breaths/min)" />
-        <input v-model.number="params.itime" placeholder="I-Time (s)" />
-      </div>
-
-      <!-- ========================= -->
-      <!-- VENT CONTROLLER -->
-      <!-- ========================= -->
-      <div v-if="type==='start_controller'" class="row">
-        <select v-model="params.controller">
-          <option value="default_controller">Simple FiO₂</option>
-          <option value="ardsnet_controller">ARDSNet</option>
-          <option value="adaptive_controller">Adaptive</option>
-          <option value="random_walk_controller">Random Walk</option>
-          <option value="http_controller">🌐 HTTP Controller</option>
-        </select>
-      </div>
-
-      <div v-if="type==='start_controller' && params.controller==='http_controller'" class="row">
-        <input v-model="params.http_url" placeholder="Controller URL" />
-        <input v-model.number="params.timeout" type="number" placeholder="Timeout (s)" />
-        <input v-model="params.config" placeholder='JSON config {"target_spo2":0.92}' />
-      </div>
-
-      <!-- ========================= -->
-      <!-- FLUID CONTROLLER -->
-      <!-- ========================= -->
-      <div v-if="type==='start_fluid_controller'" class="row">
-        <select v-model="params.fluid_controller">
-          <option value="standard_resuscitation">Standard Resuscitation (MAP 65–75)</option>
-          <option value="aggressive_resuscitation">Aggressive Resuscitation</option>
-          <option value="permissive_hypotension">Permissive Hypotension</option>
-          <option value="damage_control">Damage Control</option>
-          <option value="http_fluid_controller">🌐 HTTP Controller</option>
-        </select>
-      </div>
-
-      <div v-if="type==='start_fluid_controller' && params.fluid_controller==='http_fluid_controller'" class="row">
-        <input v-model="params.fluid_http_url" placeholder="Fluid Controller URL" />
-        <input v-model.number="params.fluid_timeout" type="number" placeholder="Timeout (s)" />
-        <input v-model="params.fluid_config" placeholder='JSON config {}' />
-      </div>
-
-      <!-- ========================= -->
-      <!-- DRUG BOLUS -->
-      <!-- ========================= -->
-      <div v-if="type==='bolus'" class="row">
-        <input v-model="params.drug" placeholder="Drug (Epinephrine)" />
-        <input v-model.number="params.dose" placeholder="Dose" />
-        <select v-model="params.route">
-          <option value="IV">IV</option>
-          <option value="IM">IM</option>
-          <option value="Subcutaneous">Subcutaneous</option>
-        </select>
-      </div>
-
-      <!-- ========================= -->
-      <!-- INFUSION -->
-      <!-- ========================= -->
-      <div v-if="type==='infusion'" class="row">
-        <input v-model="params.drug" placeholder="Drug" />
-        <input v-model.number="params.infusion_rate" placeholder="Rate (mL/hr)" />
-        <input v-model.number="params.concentration" placeholder="Concentration" />
-      </div>
-
-      <!-- ========================= -->
-      <!-- COMPOUND INFUSION -->
-      <!-- ========================= -->
-      <div v-if="type==='compound_infusion'" class="row">
-        <select v-model="params.fluid">
-          <option value="Saline">Saline</option>
-          <option value="Blood">Blood</option>
-          <option value="Plasma">Plasma</option>
-        </select>
-
-        <input v-model.number="params.compound_rate" placeholder="Rate (mL/min)" />
-        <input v-model.number="params.bag_volume" placeholder="Bag Volume (mL)" />
-      </div>
-
-      <!-- ========================= -->
-      <!-- EXERCISE -->
-      <!-- ========================= -->
-      <div v-if="type==='exercise'" class="row">
-        <input v-model.number="params.intensity" placeholder="Intensity (0–1)" />
-        <input v-model.number="params.duration" placeholder="Duration" />
-
-        <select v-model="params.duration_unit">
-          <option value="s">Seconds</option>
-          <option value="min">Minutes</option>
-        </select>
-      </div>
-
-    </div>
-
-  </div>
-
-  <button class="exp-btn submit-btn" type="submit">
-    + Add Event
-  </button>
+    <button class="exp-btn submit-btn" type="submit" aria-label="Add event">
+      + Add Event
+    </button>
   </form>
 </template>
 
@@ -537,19 +660,42 @@ switch (type.value) {
   margin-bottom: 10px;
 }
 
-.section {
-  margin-bottom: 12px;
+.section,
+.subsection {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(209, 202, 202, 0.041);
+}
+
+.subsection {
+  margin-top: 10px;
 }
 
 .label {
   color: #bbb;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
+  font-weight: 600;
 }
 
-.row {
+.field-group {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.field-label {
+  font-size: 12px;
+  color: #cfcfcf;
 }
 
 input,
@@ -557,8 +703,12 @@ select {
   background: #333;
   border: none;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   color: white;
+  font-size: 13px;
+  min-width: 120px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 input::placeholder {

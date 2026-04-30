@@ -53,9 +53,6 @@ async function run() {
     </div>
 <TargetMetrics />
 
-    <ProgressPanel />
-
-
 
     <!-- 🔥 ACTION BAR -->
     <div class="actions">
@@ -93,7 +90,7 @@ async function run() {
 ======================== */
 .exp-btn {
   padding: 12px 18px;
-  background: #333;
+  background: #1a1a1a;
   border: none;
   border-radius: 8px;
   color: white;
@@ -110,7 +107,6 @@ async function run() {
   background: #222;
 }
 
-/* 🔥 Disabled state */
 .exp-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -135,14 +131,15 @@ async function run() {
 }
 .page-wrapper {
   padding: 20px;
-  background-color: black;
+  overflow: hidden;
+
 }
 /* ========================
    PAGE
 ======================== */
 .page-wrapper {
   padding: 20px;
-  background-color: black;
+  background: linear-gradient(180deg, rgb(12, 15, 20) 0%, rgb(20, 24, 33) 55%, rgb(2, 3, 6) 100%);
   display: flex;
   flex-direction: column;
   gap: 20px; /* 🔥 spacing between major sections */
