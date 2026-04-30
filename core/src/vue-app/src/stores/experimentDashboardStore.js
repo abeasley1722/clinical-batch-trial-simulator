@@ -1,4 +1,3 @@
-
 import { defineStore } from 'pinia'
 import {
   getExperiments,
@@ -16,17 +15,13 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     selectedVitalKeys: [],
     selectedGraphType: 'line',
 
-    // 🔥 backend-driven grouping (gases, ventilator, etc.)
-    selectedGroups: [],
-
     metrics: [],
     batches: [],
     rawData: [],
 
-    // 🔥 loading state (for overlay)
     loading: false,
 
-    // 🔥 cache for fetched datasets
+    // 🔥 cache per selection set
     cachedGroups: {}
   }),
 
@@ -66,7 +61,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       return state.rawData.map(row => row.sim_time_s)
     },
 
-    // 🔥 CLEAN SERIES (no fake group logic)
+    // 🔥 CLEAN SERIES (matches backend columns EXACTLY)
     chartSeries(state) {
       if (!state.rawData?.length) return []
 
@@ -82,7 +77,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
         )
 
         return {
-          name: key.toUpperCase(),
+          name: key, // 🔥 DO NOT uppercase (must match backend columns)
           data: state.rawData.map(r => r[key] ?? null),
           type: state.selectedGraphType,
           target: metric ? Number(metric.target_value) : null,
@@ -93,6 +88,9 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
   },
 
   actions: {
+    // ========================
+    // INIT
+    // ========================
     async initialize() {
       await this.loadExperiments()
 
@@ -105,10 +103,13 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       this.experiments = await getExperiments()
     },
 
+    // ========================
+    // SELECT EXPERIMENT
+    // ========================
     async selectExperiment(id) {
       this.selectedExperimentId = id
 
-      // 🔥 reset cache when switching experiment
+      // reset cache
       this.cachedGroups = {}
 
       this.loading = true
@@ -117,7 +118,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
         await Promise.all([
           this.loadMetrics(id),
           this.loadBatches(id),
-          this.loadRawCSV(id) // default = core vitals
+          this.loadRawCSV(id, ['all']) // 🔥 FIXED (load ALL groups)
         ])
       } catch (err) {
         console.error('Experiment load failed:', err)
@@ -126,27 +127,45 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       }
     },
 
+    // ========================
+    // METRICS
+    // ========================
     async loadMetrics(experimentId) {
-      const data = await getMetricsByExperiment(experimentId)
+    const data = await getMetricsByExperiment(experimentId)
 
-      this.metrics = (data || []).map(m => ({
-        ...m,
-        target_value:
-          m.target_value !== null && m.target_value !== undefined
-            ? Number(m.target_value)
-            : null
-      }))
-    },
+    function toNumberOrNull(value) {
+      return value != null ? Number(value) : null
+    }
 
+    this.metrics = (data || []).map(m => ({
+      ...m,
+
+      // 🔥 normalize ALL numeric fields
+      target_value: toNumberOrNull(m.target_value),
+      mae: toNumberOrNull(m.mae),
+      median: toNumberOrNull(m.median),
+      std_dev: toNumberOrNull(m.std_dev),
+      wobble: toNumberOrNull(m.wobble),
+      divergence: toNumberOrNull(m.divergence),
+      percent_time_within_target_range: toNumberOrNull(m.percent_time_within_target_range),
+      time_within_target_range: toNumberOrNull(m.time_within_target_range)
+    }))
+  },
+
+    // ========================
+    // BATCHES
+    // ========================
     async loadBatches(experimentId) {
       this.batches = await getBatchesByExperiment(experimentId)
     },
 
-    // 🔥 Load CSV with caching
+    // ========================
+    // LOAD CSV (FIXED)
+    // ========================
     async loadRawCSV(experimentId, groups = null) {
-      const key = groups ? groups.join(',') : 'core'
+      const key = groups?.length ? groups.join(',') : 'core'
 
-      // ✅ use cache if available
+      // ✅ use cache
       if (this.cachedGroups[key]) {
         this.rawData = this.cachedGroups[key]
         return
@@ -162,10 +181,10 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
           return
         }
 
-        // ensure proper ordering
+        // ensure sorted
         data.sort((a, b) => a.sim_time_s - b.sim_time_s)
 
-        // save to cache
+        // cache it
         this.cachedGroups[key] = data
 
         this.rawData = data
@@ -176,15 +195,9 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       }
     },
 
-    // 🔥 Change groups (triggers fetch)
-    async setGroups(groups) {
-      this.selectedGroups = groups
-
-      if (!this.selectedExperimentId) return
-
-      await this.loadRawCSV(this.selectedExperimentId, groups)
-    },
-
+    // ========================
+    // UI CONTROLS
+    // ========================
     setGraphType(type) {
       this.selectedGraphType = type
     },
@@ -198,4 +211,3 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     }
   }
 })
-

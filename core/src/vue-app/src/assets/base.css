@@ -23,23 +23,54 @@
 
 /* semantic color variables for this project */
 :root {
-  --color-background: var(--vt-c-white);
-  --color-background-soft: var(--vt-c-white-soft);
-  --color-background-mute: var(--vt-c-white-mute);
+   :root {
+  /* ========================
+     BASE / BACKGROUNDS
+  ======================== */
+  --bg-main: #1a1a1a;              /* left panel */
+  --bg-card: #1f2437;              /* chart cards */
+  --bg-panel: #1e293b;             /* right panel blocks */
+  --bg-metric: #222;               /* metric cards */
 
-  --color-border: var(--vt-c-divider-light-2);
-  --color-border-hover: var(--vt-c-divider-light-1);
+  /* ========================
+     INTERACTIVE / UI
+  ======================== */
+  --bg-button: #334155;
+  --bg-button-hover: #475569;
+  --bg-legend: #2a3050;
+  --bg-legend-hover: #3a4170;
 
-  --color-heading: var(--vt-c-text-light-1);
-  --color-text: var(--vt-c-text-light-1);
+  /* ========================
+     PRIMARY / ACCENT
+  ======================== */
+  --accent-primary: #2563eb;       /* active experiment */
+  --accent-info: #4fc3f7;          /* targets + metric highlight */
 
-  --section-gap: 160px;
-  --primary-color: #98b8e8;
-  --secondary-color: #00000;
-  --text-color: #333;
-  --background-color: ##cdcccd;
+  /* ========================
+     TEXT
+  ======================== */
+  --text-main: #e5e7eb;
+  --text-secondary: #cbd5f5;
+  --text-muted: #9ca3af;
+  --text-light: #ccc;
+  --text-faint: #aaa;
 
-  --font-main: 'Inter', sans-serif;
+  /* ========================
+     BORDERS
+  ======================== */
+  --border-main: #334155;
+  --border-soft: #333;
+
+  /* ========================
+     STATUS COLORS
+  ======================== */
+  --success: #2e7d32;
+
+  /* ========================
+     SHADOW
+  ======================== */
+  --shadow-main: 0 4px 12px rgba(0,0,0,0.2);
+}
 
 
   

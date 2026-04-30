@@ -1,19 +1,25 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+import logo from '@/assets/large-logo.png'
+function exitApp() {
+  window.close()
+}
+
 
 </script>
 
 <template>
+ <div class="app-layout">
   <!-- Top Bar -->
   <div class="top-bar">
-    <h3>Clinical Batch Trial Simulator</h3>
+    <img :src="logo" alt="App Logo" class="logo" />
   </div>
 
-  <!-- Sidebar //Note: Create a settings page-->
+  <!-- Sidebar -->
   <div class="sidebar">
     <nav>
       <RouterLink to="/">⊞</RouterLink>
-      <RouterLink to="/results">⚙</RouterLink> 
+      <button class="exit-btn" @click="exitApp">⏻</button>
     </nav>
   </div>
 
@@ -21,19 +27,25 @@ import { RouterLink, RouterView } from 'vue-router'
   <div class="main-content">
     <RouterView />
   </div>
+</div>
 </template>
 
 
 <style scoped>
 
-/*Top Bar*/
+/* ROOT LAYOUT */
+.app-layout {
+  height: 100%;
+}
+
+/* TOP BAR */
 .top-bar {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 60px;
-  background-color: #2c3e50;
+  background: #01101f;
   color: white;
   display: flex;
   align-items: center;
@@ -41,27 +53,39 @@ import { RouterLink, RouterView } from 'vue-router'
   z-index: 1000;
 }
 
-/* Sidebar */
+/* SIDEBAR */
 .sidebar {
   position: fixed;
-  top: 60px; /* below top bar */
+  top: 60px;
   left: 0;
   width: 70px;
   height: calc(100vh - 60px);
-  background-color: #34495e;
+  background-color: #01101f;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   padding: 20px;
 }
+.logo {
+  position: relative;
+  z-index: 1;
 
-/* Nav links */
+  width: 90px;          /* big but controlled */
+  max-width: 80vw;
+
+  border-radius: 6px;   /* 🔥 rounded corners */
+  overflow: hidden;      /* ensures clean edges */
+
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6); /* depth */
+
+}
+
+/* NAV */
 .sidebar nav {
   display: flex;
   flex-direction: column;
-
   gap: 10px;
-  margin-top: auto; 
+  margin-top: auto;
+
 }
 
 .sidebar a {
@@ -73,26 +97,16 @@ import { RouterLink, RouterView } from 'vue-router'
   font-weight: bold;
 }
 
-/* Bottom buttons */
-.bottom-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.bottom-buttons button {
-  padding: 10px;
-  border: none;
-  cursor: pointer;
-  background-color: #1abc9c;
-  color: white;
-  border-radius: 5px;
-}
-
-
+/* MAIN CONTENT (🔥 FIXED) */
 .main-content {
-  margin-left: 70px;
-  margin-top: 60px;
+  position: absolute;
+  top: 60px;
+  left: 70px;
+
+  width: calc(100% - 70px);
   height: calc(100vh - 60px);
+
+
+  overflow-y: auto;
 }
 </style>
