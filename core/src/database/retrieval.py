@@ -173,6 +173,7 @@ def get_raw_csv_dataframe(experiment_id, selection=None):
         ["hr_bpm"] → column
         ["all"] → everything
     """
+    print(f"Loading CSV for experiment {experiment_id} with selection: {selection}")
 
     csv_path = get_experiment_csv(experiment_id)
 

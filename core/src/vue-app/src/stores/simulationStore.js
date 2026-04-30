@@ -1,5 +1,7 @@
+// src/stores/simulationStore.js
 import { defineStore } from 'pinia'
-import { runSimulation, getBatchStatus } from '@/services/api'
+import { runSimulation, getRawCSVData } from '@/services/api'
+import router from '@/router'
 
 export const useSimulationStore = defineStore('simulation', {
   state: () => ({
@@ -35,7 +37,7 @@ export const useSimulationStore = defineStore('simulation', {
 
   actions: {
     // =========================
-    // TARGET METRICS (FIXED)
+    // TARGET METRICS
     // =========================
     addTargetMetric(key) {
       if (this.targetMetrics[key]) return
@@ -86,7 +88,7 @@ export const useSimulationStore = defineStore('simulation', {
     },
 
     // =========================
-    // BUILD PAYLOAD (FINAL STRUCTURE)
+    // BUILD PAYLOAD
     // =========================
     buildPayload() {
       return {
@@ -141,6 +143,8 @@ export const useSimulationStore = defineStore('simulation', {
         this.validatePayload()
         this.status = 'submitting'
 
+        router.push('/loading')
+
         const payload = this.buildPayload()
         console.log('SENDING:\n', JSON.stringify(payload, null, 2))
 
@@ -149,25 +153,26 @@ export const useSimulationStore = defineStore('simulation', {
         this.batchId = res.batch_id
 
         if (!this.batchId) {
-          throw new Error("batch_id missing from backend")
+          throw new Error('batch_id missing from backend')
         }
-        this.status = 'running'
 
+        this.status = 'running'
         this.startPolling()
+
       } catch (err) {
         console.error(err)
         this.status = 'error'
+        router.push('/')
         alert(err.message)
       }
     },
 
     // =========================
-    // POLLING (PROGRESS)
+    // POLLING (FIXED)
     // =========================
     startPolling() {
       if (!this.batchId) return
 
-      // clear old interval if exists
       if (this.pollInterval) {
         clearInterval(this.pollInterval)
       }
@@ -198,7 +203,7 @@ export const useSimulationStore = defineStore('simulation', {
     },
 
     // =========================
-    // RESET (optional but useful)
+    // RESET
     // =========================
     reset() {
       this.batchId = null

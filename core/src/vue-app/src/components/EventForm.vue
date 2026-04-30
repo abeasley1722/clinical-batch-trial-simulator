@@ -1,3 +1,4 @@
+<!-- src/components/AddEventForm.vue -->
 <script setup>
 import { reactive, ref, watch } from 'vue'
 
@@ -43,6 +44,8 @@ const params = reactive({
 
   // hemorrhage
   compartment: 'RightLeg',
+  rate_mode: 'absolute',
+  flow_rate: 100,
   rate_mode: 'absolute',
   flow_rate: 100,
   total_volume: 500,
@@ -195,9 +198,9 @@ function submit(e) {
   e.preventDefault()
 
   const event = {
+  const event = {
     activation: activation.value,
-    type: type.value,
-    params: {}
+    type: type.value
   }
 
   if (activation.value === 'time') {
@@ -242,7 +245,7 @@ function submit(e) {
       break
 
     case 'intubate':
-      event.params = { type: params.intubation }
+      event.intubationType = params.intubation
       break
 
     case 'start_vent':
@@ -280,7 +283,6 @@ function submit(e) {
       break
 
     case 'stop_fluid_controller':
-      event.params = {}
       break
 
     case 'bolus':
@@ -334,7 +336,6 @@ function submit(e) {
 
 <template>
   <form @submit="submit" class="panel">
-
     <h3 class="title">Add Event</h3>
 
     <!-- ── ACTIVATION ── -->
@@ -895,7 +896,7 @@ input, select, textarea {
   background: #333;
   border: none;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   color: white;
   font-family: inherit;
   font-size: 14px;
