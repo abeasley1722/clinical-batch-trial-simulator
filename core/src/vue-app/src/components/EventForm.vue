@@ -198,7 +198,6 @@ function submit(e) {
   e.preventDefault()
 
   const event = {
-  const event = {
     activation: activation.value,
     type: type.value
   }
