@@ -6,11 +6,7 @@ const store = useSimulationStore()
 
 const patients = [
   'soldier',
-  'adult',
-  'StandardMale',
-  'StandardFemale',
-  'ARDS',
-  'Hemorrhage'
+  'adult'
 ]
 
 const totalPercent = computed(() =>
