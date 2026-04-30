@@ -2231,3 +2231,12 @@ def run_batch_thread(batch_id, batch):
     for metric in metrics_list:
         insert_metric_from_object(metric)
 
+    with batch_lock:
+        if cancelled:
+            batches[batch_id]['status'] = 'cancelled'
+            batches[batch_id]['message'] = f'Batch cancelled by user. {completed}/{total_jobs} jobs completed with partial results.'
+            print(f"[BATCH] {batch_id} cancelled by user. {completed}/{total_jobs} jobs completed with partial results.")
+        else:
+            batches[batch_id]['status'] = 'completed'
+            batches[batch_id]['message'] = f'Batch completed successfully. {completed}/{total_jobs} jobs completed.'
+            print(f"[BATCH] {batch_id} completed successfully. {completed}/{total_jobs} jobs completed.")

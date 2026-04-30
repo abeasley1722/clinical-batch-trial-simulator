@@ -101,7 +101,8 @@ async function cancel() {
   color: #4da3ff;
 }
 
-.status.complete {
+.status.complete,
+.status.completed {
   color: #4caf50;
 }
 

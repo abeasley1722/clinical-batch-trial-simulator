@@ -3,19 +3,16 @@ import { runSimulation, getBatchStatus } from '@/services/api'
 
 export const useSimulationStore = defineStore('simulation', {
   state: () => ({
-    name: 'Test Batch',
-    duration: 300,
+    name: '',
+    duration: null,
     sampleRate: 50,
 
-    workers: 4,
+    workers: null,
     replicates: 1,
 
-    patientCount: 8,
+    patientCount: null,
 
-    demographics: [
-      { name: 'soldier', percent: 50 },
-      { name: 'adult', percent: 50 }
-    ],
+    demographics: [],
 
 
     targetMetrics: {},
@@ -29,6 +26,8 @@ export const useSimulationStore = defineStore('simulation', {
     // Progress tracking
     batchId: null,
     batchStatus: null,
+    completed: 0,
+    total: 0,
     progress: 0,
     status: 'idle',
     pollInterval: null
@@ -180,9 +179,11 @@ export const useSimulationStore = defineStore('simulation', {
           this.batchStatus = data
           this.status = data.status
 
-          this.completed = data.completed ?? 0
-          this.total = data.total ?? 0
-          this.progress = data.progress ?? 0
+          this.completed = data.completed_jobs ?? 0
+          this.total = data.total_jobs ?? 0
+          this.progress = this.total > 0
+            ? Math.round((this.completed / this.total) * 100)
+            : 0
 
           if (data.status !== 'running') {
             clearInterval(this.pollInterval)
@@ -193,7 +194,7 @@ export const useSimulationStore = defineStore('simulation', {
           clearInterval(this.pollInterval)
           this.pollInterval = null
         }
-      }, 30000)
+      }, 2000)
     },
 
     // =========================

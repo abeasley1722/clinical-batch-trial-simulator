@@ -20,7 +20,7 @@ from flask import Flask, request, jsonify, send_file, Blueprint
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
-from core.src.experiment_executor import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
+from core.src.experiment_executor import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag, batches, batch_lock, batch_cancel_flags
 from core.src.controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
 
 # === DATABASE ROUTES ===
@@ -108,9 +108,6 @@ def test_http_controller():
         return jsonify({'success': False, 'error': str(e)})
     
 # === BATCH MODE SUPPORT ===
-batches = {}
-batch_lock = threading.Lock()
-batch_cancel_flags = {}  # batch_id -> True if should cancel (for thread-level check)
 
 @api_bp.route('/api/submit_batch', methods=['POST'])
 def submit_batch():

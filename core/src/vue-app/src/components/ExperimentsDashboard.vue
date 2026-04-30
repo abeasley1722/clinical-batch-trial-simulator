@@ -10,7 +10,8 @@ import {
   TooltipComponent,
   GridComponent,
   DataZoomComponent,
-  MarkLineComponent
+  MarkLineComponent,
+  LegendComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { useExperimentDashboardStore } from '../stores/experimentDashboardStore'
@@ -26,7 +27,8 @@ use([
   TooltipComponent,
   GridComponent,
   DataZoomComponent,
-  MarkLineComponent
+  MarkLineComponent,
+  LegendComponent
 ])
 
 const store = useExperimentDashboardStore()
