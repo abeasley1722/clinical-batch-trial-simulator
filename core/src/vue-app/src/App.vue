@@ -6,6 +6,14 @@ import logoUrl from './assets/logo.png'
 
 const inputUrl = ref(serverUrl.value)
 
+function exitApp() {
+  if (window.electronAPI) {
+    window.electronAPI.exitApp()
+  } else {
+    window.close()
+  }
+}
+
 function handleConnect() {
   connectToServer(inputUrl.value)
 }

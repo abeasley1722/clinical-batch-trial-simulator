@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -14,7 +14,8 @@ function createWindow() {
     title: 'Clinical Batch Trial Simulator',
     webPreferences: {
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js')
     }
   })
 
@@ -40,6 +41,8 @@ app.whenReady().then(() => {
     }
   })
 })
+
+ipcMain.on('exit-app', () => app.quit())
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
