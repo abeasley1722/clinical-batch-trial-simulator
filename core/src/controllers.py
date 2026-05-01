@@ -52,7 +52,7 @@ UNIT_MAP = {
     "inch": LengthUnit.inch,
     # Concentration units
     "g/L": MassPerVolumeUnit.g_Per_L,
-    "mg/mL": MassPerVolumeUnit.g_Per_L,
+    "mg/mL": MassPerVolumeUnit.mg_Per_mL,
     "ug/mL": MassPerVolumeUnit.ug_Per_mL,
     # Compliance units
     "mL/cmH2O": VolumePerPressureUnit.mL_Per_cmH2O,

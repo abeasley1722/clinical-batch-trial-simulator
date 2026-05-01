@@ -10,17 +10,17 @@ from dataclasses import asdict
 import os
 import sys
 import json
-import threading
-import random
 import queue
 import uuid
-import time
 import io
 import csv
-import tempfile
 import argparse
 import uuid
 import requests as http_requests
+import threading
+import random
+import time
+import tempfile
 import pandas as pd
 import numpy as np
 import math

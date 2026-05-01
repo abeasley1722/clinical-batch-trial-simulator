@@ -1,6 +1,12 @@
-// src/stores/simulationStore.js
+
+// ============================================================
+// Author:         Anointiyae Beasley
+// Date Created:   2026-04-01
+// Description:    Pinia store for managing simulation setup,
+//                 events, and batch execution with progress tracking.
+// ============================================================
 import { defineStore } from 'pinia'
-import { runSimulation, getRawCSVData, getBatchStatus } from '@/services/api'
+import { runSimulation, getBatchStatus } from '@/services/api'
 import router from '@/router'
 
 export const useSimulationStore = defineStore('simulation', {
@@ -172,7 +178,7 @@ export const useSimulationStore = defineStore('simulation', {
     },
 
     // =========================
-    // POLLING (FIXED)
+    // POLLING 
     // =========================
     startPolling() {
       if (!this.batchId) return

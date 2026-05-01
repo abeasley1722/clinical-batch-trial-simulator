@@ -1,3 +1,11 @@
+
+// ============================================================
+// Author:         Anointiyae Beasley
+// Date Created:   2026-04-01
+// Description:    Pinia store for managing experiment dashboard
+//                 data, including charts, metrics, and batches.
+// ============================================================
+
 import { defineStore } from 'pinia'
 import {
   getExperiments,
@@ -21,7 +29,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
 
     loading: false,
 
-    // 🔥 cache per selection set
+    // cache per selection set
     cachedGroups: {}
   }),
 
@@ -43,7 +51,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       }))
     },
 
-    // ✅ Available numeric vitals
+    // Available numeric vitals
     availableVitals(state) {
       if (!state.rawData?.length) return []
 
@@ -61,7 +69,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
       return state.rawData.map(row => row.sim_time_s)
     },
 
-    // 🔥 CLEAN SERIES (matches backend columns EXACTLY)
+    // CLEAN SERIES 
     chartSeries(state) {
       if (!state.rawData?.length) return []
 
@@ -77,7 +85,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
         )
 
         return {
-          name: key, // 🔥 DO NOT uppercase (must match backend columns)
+          name: key, // DO NOT uppercase (must match backend columns)
           data: state.rawData.map(r => r[key] ?? null),
           type: state.selectedGraphType,
           target: metric ? Number(metric.target_value) : null,
@@ -118,7 +126,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
         await Promise.all([
           this.loadMetrics(id),
           this.loadBatches(id),
-          this.loadRawCSV(id, ['all']) // 🔥 FIXED (load ALL groups)
+          this.loadRawCSV(id, ['all']) 
         ])
       } catch (err) {
         console.error('Experiment load failed:', err)
@@ -140,7 +148,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     this.metrics = (data || []).map(m => ({
       ...m,
 
-      // 🔥 normalize ALL numeric fields
+      // normalize ALL numeric fields
       target_value: toNumberOrNull(m.target_value),
       mae: toNumberOrNull(m.mae),
       median: toNumberOrNull(m.median),
@@ -166,7 +174,7 @@ export const useExperimentDashboardStore = defineStore('experimentDashboard', {
     async loadRawCSV(experimentId, groups = null) {
       const key = groups?.length ? groups.join(',') : 'core'
 
-      // ✅ use cache
+      // use cache
       if (this.cachedGroups[key]) {
         this.rawData = this.cachedGroups[key]
         return

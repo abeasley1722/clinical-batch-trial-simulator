@@ -1,4 +1,11 @@
-<!-- src/views/Home.vue -->
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue home page for navigating to simulation
+                setup or viewing results.
+============================================================
+"""
 <script setup>
 import { useRouter } from 'vue-router'
 import logo from '@/assets/large-logo.png'
@@ -19,7 +26,7 @@ function goToResults() {
     <div class="overlay"></div>
 
     <div class="content">
-      <!-- 🔥 HERO LOGO -->
+
       <div class="logo-wrapper">
         <div class="logo-glow"></div>
         <img :src="logo" alt="App Logo" class="logo" />
@@ -76,7 +83,7 @@ function goToResults() {
 }
 
 /* ===================== */
-/* 🔥 LOGO HERO */
+/* LOGO */
 /* ===================== */
 /* wrapper spacing */
 /* center wrapper */
@@ -102,7 +109,7 @@ function goToResults() {
   z-index: 0;
 }
 
-/* 🔥 FINAL LOGO */
+/*  FINAL LOGO */
 .logo {
   position: relative;
   z-index: 1;
@@ -110,7 +117,7 @@ function goToResults() {
   width: 720px;          /* big but controlled */
   max-width: 80vw;
 
-  border-radius: 24px;   /* 🔥 rounded corners */
+  border-radius: 24px;   /* rounded corners */
   overflow: hidden;      /* ensures clean edges */
 
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6); /* depth */

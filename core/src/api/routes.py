@@ -8,10 +8,8 @@ Description:   API endpoints for the Pulse server
 
 import glob
 import os
-import sys
 import threading
 import uuid
-import zipfile
 import requests as http_requests
 from datetime import datetime
 from pathlib import Path
@@ -273,23 +271,19 @@ def api_get_raw_csv_dataframe(experiment_id):
         ?selection=all
         ?selection=hr_bpm,spo2_pct
     """
-    #print(f"Received request for raw CSV data of experiment {experiment_id} with query params: {request.args}")   
-    # 🔥 Get selection from query params
+  
+    # Get selection from query params
     selection_param = request.args.get("selection")
-    #print(f"Parsed selection param: {selection_param}")
+
     if selection_param:
         selection = selection_param.split(",")
     else:
         selection = None  # default → core vitals
 
-    # 🔥 Fetch filtered dataframe
+    # Fetch filtered dataframe
     df = get_raw_csv_dataframe(experiment_id, selection)
 
-    # 🔥 Convert NaN → None (JSON safe)
+    # Convert NaN → None (JSON safe)
     df = df.replace({np.nan: None})
-
-    # 🔥 Debug (corrected)
-    #print("Columns returned:", df.columns.tolist())
-    #print(df.head())
 
     return jsonify(df.to_dict(orient='records'))

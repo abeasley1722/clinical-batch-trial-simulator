@@ -1,3 +1,11 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for displaying batch progress,
+                status, and allowing cancel of simulation.
+============================================================
+"""
 <script setup>
 import { useSimulationStore } from '@/stores/simulationStore'
 import { cancelBatch } from '@/services/api'

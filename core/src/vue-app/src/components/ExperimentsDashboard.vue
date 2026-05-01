@@ -1,3 +1,11 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue dashboard component for displaying experiment
+                charts, metrics, and saved experiments.
+============================================================
+"""
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -211,8 +219,8 @@ function makeChartOptions(group, xAxisLabels, graphType) {
       data: xAxisLabels,
       boundaryGap: false,
       axisLabel: {
-        fontSize: 14,              // 👈 increase font size
-        color: 'white' // 👈 your theme color
+        fontSize: 14,             
+        color: 'white' 
       },
     },
 
@@ -220,8 +228,8 @@ function makeChartOptions(group, xAxisLabels, graphType) {
       type: 'value',
       scale: true,
       axisLabel: {
-        fontSize: 14,              // 👈 increase font size
-        color: 'white' // 👈 your theme color
+        fontSize: 14,             
+        color: 'white' 
       },
     },
 
@@ -268,7 +276,7 @@ function makeChartOptions(group, xAxisLabels, graphType) {
 
        <div class="charts-layout">
 
-        <!-- 🔥 MAIN 4 -->
+        <!-- MAIN 4 -->
         <div class="primary-grid">
           <div
             v-for="group in primaryCharts"
@@ -296,7 +304,7 @@ function makeChartOptions(group, xAxisLabels, graphType) {
           </div>
         </div>
 
-      <!-- 🔽 SECONDARY SECTION -->
+      <!-- SECONDARY SECTION -->
 <div class="secondary-section">
 
   <!-- Divider -->
@@ -620,7 +628,7 @@ function makeChartOptions(group, xAxisLabels, graphType) {
 }
 
 /* ========================
-   CHART (🔥 FIX)
+   CHART 
 ======================== */
 .chart {
   height: 400px;

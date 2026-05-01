@@ -1,3 +1,12 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for setting patient demographics,
+                validating percentages, and showing breakdown.
+============================================================
+"""
+
 <script setup>
 import { computed } from 'vue'
 import { useSimulationStore } from '@/stores/simulationStore'
@@ -15,7 +24,7 @@ const totalPercent = computed(() =>
 
 const isValid = computed(() => totalPercent.value === 100)
 
-// 🔥 Breakdown
+// Breakdown
 const patientBreakdown = computed(() =>
   store.demographics.map(d => ({
     name: d.name,

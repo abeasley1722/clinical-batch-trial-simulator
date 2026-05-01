@@ -1,3 +1,11 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for adding and managing target
+                metrics for the simulation.
+============================================================
+"""
 <script setup>
 import { ref, computed } from 'vue'
 import { useSimulationStore } from '@/stores/simulationStore'
@@ -35,7 +43,7 @@ function addMetric() {
   <div class="panel">
     <h3 class="title">Target Metrics</h3>
 
-    <!-- ➕ Add Metric -->
+    <!-- Add Metric -->
     <div class="row">
       <select v-model="selectedMetric">
         <option :value="null" disabled>Select Metric</option>
@@ -104,7 +112,7 @@ function addMetric() {
 
 <style scoped>
 /* ========================
-   PANEL (MATCH DASHBOARD)
+   PANEL 
 ======================== */
 .panel {
   background: #1c2431;
@@ -150,7 +158,7 @@ function addMetric() {
 }
 
 /* ========================
-   FIELD (LABEL + INPUT STACK)
+   FIELD 
 ======================== */
 .field {
   display: flex;
@@ -181,7 +189,7 @@ input::placeholder {
 }
 
 /* ========================
-   BUTTONS (MATCH exp-btn)
+   BUTTONS 
 ======================== */
 .exp-btn {
   padding: 8px 14px;

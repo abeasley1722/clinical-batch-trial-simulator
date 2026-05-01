@@ -1,3 +1,16 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for setting batch name, duration, 
+                and workers using the simulation store.
+============================================================
+"""
+<script setup>
+import { useSimulationStore } from '@/stores/simulationStore'
+const store = useSimulationStore()
+</script>
+
 <template>
   <div class="panel">
     <h3 class="title">Batch Setup</h3>
@@ -17,11 +30,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import { useSimulationStore } from '@/stores/simulationStore'
-const store = useSimulationStore()
-</script>
 
 <style scoped>
 /* ========================

@@ -17,18 +17,16 @@ Typical runtime: ~2-3 minutes per patient for stabilization
 """
 
 import os
-import sys
-import json
-import argparse
 import random
 import hashlib
-import uuid
+import sys
+import json
 from core.src.database.patient import insert_patient
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import List, Optional
-from multiprocessing import Pool, cpu_count
+
 
 from core.src.vital_ranges import SOLDIER, ADULT, Demographic
 

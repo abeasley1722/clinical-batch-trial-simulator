@@ -6,9 +6,10 @@ Description:    Main entrypoint for the Clinical Batch Trial Simulator server.
                 Initializes the Flask app and SocketIO, and starts the server.
 ============================================================ 
 """
+import core.src.bootstrap
+
 from multiprocessing import freeze_support
 freeze_support()
-import core.src.bootstrap
 
 import argparse
 import os

@@ -1,3 +1,9 @@
+// ============================================================
+// Author:         Zack Kao
+// Date Created:   2026-04-01
+// Description:    Handles server connection setup and tracks
+//                 connection status for the application.
+// ============================================================
 import { ref } from 'vue'
 
 const hostname = window.location.hostname || 'localhost'
