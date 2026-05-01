@@ -1,3 +1,11 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Main Vue layout handling navigation, server
+                connection, and rendering routed views.
+============================================================
+"""
 <script setup>
 import { ref, onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
@@ -163,7 +171,7 @@ const STATUS_COLOR = {
   width: 90px;          /* big but controlled */
   max-width: 80vw;
 
-  border-radius: 6px;   /* 🔥 rounded corners */
+  border-radius: 6px;   /* rounded corners */
   overflow: hidden;      /* ensures clean edges */
 
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6); /* depth */
@@ -188,7 +196,7 @@ const STATUS_COLOR = {
   font-weight: bold;
 }
 
-/* MAIN CONTENT (🔥 FIXED) */
+/* MAIN CONTENT */
 .main-content {
   position: absolute;
   top: 60px;

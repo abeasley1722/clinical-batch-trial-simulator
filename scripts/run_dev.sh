@@ -10,8 +10,6 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ENTRYPOINT="$PROJECT_ROOT/core/src/run.py"
 INIT_DB="$PROJECT_ROOT/core/src/init_db.py"
 
-# ✅ Set Pulse path (WSL format)
-export PULSE_ENGINE_PATH="/mnt/c/Users/badas/Pulse/builds/debug/install"
 
 cd "$PROJECT_ROOT"
 

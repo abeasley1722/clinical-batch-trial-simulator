@@ -1,3 +1,19 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for displaying and managing
+                timed and triggered events in a timeline.
+============================================================
+"""
+<script setup>
+import { useSimulationStore } from '../stores/simulationStore'
+import EventRow from './EventRow.vue'
+import EventForm from './EventForm.vue'
+
+const store = useSimulationStore()
+</script>
+
 <template>
   <div class="panel">
     <h3 class="title">Event Timeline</h3>
@@ -49,17 +65,10 @@
   </div>
 </template>
 
-<script setup>
-import { useSimulationStore } from '../stores/simulationStore'
-import EventRow from './EventRow.vue'
-import EventForm from './EventForm.vue'
-
-const store = useSimulationStore()
-</script>
 
 <style scoped>
 /* ========================
-   PANEL (MATCH DASHBOARD)
+   PANEL 
 ======================== */
 .panel {
   background: #1c2431;

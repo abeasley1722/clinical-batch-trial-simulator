@@ -1,3 +1,9 @@
+// ============================================================
+// Author:         Anointiyae Beasley
+// Date Created:   2026-04-01
+// Description:    API service file for handling requests related
+//                 to simulations, batches, experiments, and data.
+// ============================================================
 import { serverUrl } from './server.js'
 function BASE_URL() { return serverUrl.value }
 
@@ -125,7 +131,7 @@ export function getPatientsByCohort(cohortId) {
 }
 
 // ========================
-// 🔥 RETRIEVAL (FOR CHARTS — MOST IMPORTANT)
+// RETRIEVAL (FOR CHARTS — MOST IMPORTANT)
 // ========================
 export function getMetricsDataframe(experimentId) {
   return request(`${BASE_URL()}/api/retrieval/metrics/${experimentId}`)

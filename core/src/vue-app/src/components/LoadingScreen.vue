@@ -1,4 +1,11 @@
-<!-- src/components/LoadingScreen.vue -->
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for displaying simulation loading
+                screen with progress and auto navigation.
+============================================================
+"""
 <script setup>
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'

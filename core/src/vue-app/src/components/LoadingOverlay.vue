@@ -1,3 +1,17 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for showing a loading overlay
+                with a spinner while charts load.
+============================================================
+"""
+<script setup>
+defineProps({
+  visible: Boolean
+})
+</script>
+
 <template>
   <div v-if="visible" class="overlay">
     <div class="popup">
@@ -6,12 +20,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-defineProps({
-  visible: Boolean
-})
-</script>
 
 <style scoped>
 .overlay {

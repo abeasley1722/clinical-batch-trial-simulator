@@ -1,4 +1,11 @@
-<!-- src/components/AddEventForm.vue -->
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for creating and adding simulation
+                events with different types, triggers, and parameters.
+============================================================
+"""
 <script setup>
 import { reactive, ref, watch } from 'vue'
 

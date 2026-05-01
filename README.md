@@ -47,8 +47,8 @@ Requirements:
 - Download Node.js LTS version
 - Add to systems PATH
 - Install Vue: npm create vite@latest
-- 
 
 
-# Developer script
+
+# Developer script (run at root of file)
 bash ./scripts/run_dev.sh

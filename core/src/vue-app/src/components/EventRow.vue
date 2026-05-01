@@ -1,31 +1,11 @@
-<template>
-  <div class="timeline-event" :class="[typeClass, { triggered: event.activation === 'trigger' }]">
-
-    <!-- HEADER: title + time badge -->
-    <div class="event-header">
-      <span class="event-title">{{ eventLabel }}</span>
-
-      <span class="event-time">
-        <template v-if="event.activation === 'time'">
-          ⏱ {{ event.time }}s
-        </template>
-        <template v-else>
-          🎯 Trigger
-        </template>
-      </span>
-    </div>
-
-    <!-- DETAILS: key params -->
-    <div class="event-details">{{ detailText }}</div>
-
-    <!-- ACTIONS -->
-    <div class="event-actions">
-      <button class="icon-btn" @click="$emit('remove')">✖ Remove</button>
-    </div>
-
-  </div>
-</template>
-
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue component for displaying a timeline event
+                with type, details, and remove action.
+============================================================
+"""
 <script setup>
 import { computed } from 'vue'
 
@@ -92,6 +72,35 @@ const detailText = computed(() => {
   }
 })
 </script>
+
+<template>
+  <div class="timeline-event" :class="[typeClass, { triggered: event.activation === 'trigger' }]">
+
+    <!-- HEADER: title + time badge -->
+    <div class="event-header">
+      <span class="event-title">{{ eventLabel }}</span>
+
+      <span class="event-time">
+        <template v-if="event.activation === 'time'">
+          ⏱ {{ event.time }}s
+        </template>
+        <template v-else>
+          🎯 Trigger
+        </template>
+      </span>
+    </div>
+
+    <!-- DETAILS: key params -->
+    <div class="event-details">{{ detailText }}</div>
+
+    <!-- ACTIONS -->
+    <div class="event-actions">
+      <button class="icon-btn" @click="$emit('remove')">✖ Remove</button>
+    </div>
+
+  </div>
+</template>
+
 
 <style scoped>
 /* ========================

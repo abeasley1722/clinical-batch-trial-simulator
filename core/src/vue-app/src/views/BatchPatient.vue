@@ -1,8 +1,15 @@
+"""
+============================================================
+Author:         Anointiyae Beasley
+Date Created:   2026-04-01
+Description:    Vue page for configuring and running a batch
+                simulation with validation and form inputs.
+============================================================
+"""
 <script setup>
 import { ref, computed } from 'vue'
 import BatchSetup from '../components/BatchSetup.vue'
 import TimelineBuilder from '../components/TimelineBuilder.vue'
-import ProgressPanel from '@/components/ProgressPanel.vue'
 import TargetMetrics from '@/components/TargetMetrics.vue'
 import Demographics from '@/components/Demographics.vue'
 import { useSimulationStore } from '../stores/simulationStore'
@@ -12,7 +19,7 @@ const store = useSimulationStore()
 const loading = ref(false)
 const error = ref(null)
 
-// 🔥 Basic validation (expand later)
+
 const isValid = computed(() => {
   return (
     store.name &&
@@ -54,7 +61,7 @@ async function run() {
 <TargetMetrics />
 
 
-    <!-- 🔥 ACTION BAR -->
+    <!-- ACTION BAR -->
     <div class="actions">
 
       <div class="error" v-if="error">
@@ -142,7 +149,7 @@ async function run() {
   background: linear-gradient(180deg, rgb(12, 15, 20) 0%, rgb(20, 24, 33) 55%, rgb(2, 3, 6) 100%);
   display: flex;
   flex-direction: column;
-  gap: 20px; /* 🔥 spacing between major sections */
+  gap: 20px; 
 }
 
 /* ========================
@@ -151,7 +158,7 @@ async function run() {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px; /* 🔥 spacing between forms */
+  gap: 16px; 
 }
 
 /* each form wrapper */
@@ -222,7 +229,7 @@ async function run() {
 ======================== */
 @media (max-width: 900px) {
   .form-grid {
-    grid-template-columns: 1fr; /* 🔥 stack on mobile */
+    grid-template-columns: 1fr;
   }
 
   .form-item.full {

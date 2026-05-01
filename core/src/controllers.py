@@ -11,10 +11,9 @@ import requests as http_requests
 from pulse.cdm.scalars import (
     FrequencyUnit, PressureUnit, TimeUnit,
     VolumeUnit, VolumePerTimeUnit, MassPerVolumeUnit,
-    LengthUnit, MassUnit, PressureTimePerVolumeUnit, VolumePerPressureUnit,
-    AmountPerVolumeUnit
+    LengthUnit, MassUnit, PressureTimePerVolumeUnit, VolumePerPressureUnit
 )
-from pulse.cdm.engine import SEDataRequest, IEventHandler, eEvent
+from pulse.cdm.engine import SEDataRequest
 
 # === UNIT MAPPING FOR HTTP CONTROLLERS ===
 UNIT_MAP = {

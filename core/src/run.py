@@ -8,11 +8,9 @@ Description:    Main entrypoint for the Clinical Batch Trial Simulator server.
 """
 from multiprocessing import freeze_support
 freeze_support()
-import core.src.bootstrap
 
 import argparse
 import os
-import sys
 
 from core.src import create_app, socketio
 from core.src.runtime_paths import PULSE_HOME, init_native_paths, init_runtime_dirs
