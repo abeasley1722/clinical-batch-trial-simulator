@@ -1,4 +1,5 @@
-const BASE_URL = 'http://localhost:8080'
+import { serverUrl } from './server.js'
+function BASE_URL() { return serverUrl.value }
 
 // ========================
 // REQUEST HELPER 
@@ -36,7 +37,7 @@ async function request(url, options = {}) {
 // BATCH EXECUTION
 // ========================
 export async function runSimulation(payload) {
-  const res = await fetch(`${BASE_URL}/api/submit_batch`, {
+  const res = await fetch(`${BASE_URL()}/api/submit_batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -57,7 +58,7 @@ export async function runSimulation(payload) {
 // BATCHES
 // ========================
 export async function getBatchStatus(batchId) {
-  const res = await fetch(`${BASE_URL}/api/batch_status/${batchId}`)
+  const res = await fetch(`${BASE_URL()}/api/batch_status/${batchId}`)
 
   if (!res.ok) {
     throw new Error('Failed to fetch batch status')
@@ -67,19 +68,19 @@ export async function getBatchStatus(batchId) {
 }
 
 export function getBatch(batchId) {
-  return request(`${BASE_URL}/api/batches/${batchId}`)
+  return request(`${BASE_URL()}/api/batches/${batchId}`)
 }
 
 export function getBatchesByExperiment(experimentId) {
-  return request(`${BASE_URL}/api/batches/by_experiment/${experimentId}`)
+  return request(`${BASE_URL()}/api/batches/by_experiment/${experimentId}`)
 }
 
 export function getBatchesByPatient(patientId) {
-  return request(`${BASE_URL}/api/batches/by_patient/${patientId}`)
+  return request(`${BASE_URL()}/api/batches/by_patient/${patientId}`)
 }
 
 export async function cancelBatch(batchId) {
-  const res = await fetch(`${BASE_URL}/api/cancel_batch/${batchId}`, {
+  const res = await fetch(`${BASE_URL()}/api/cancel_batch/${batchId}`, {
     method: 'POST'
   })
 
@@ -94,48 +95,48 @@ export async function cancelBatch(batchId) {
 // EXPERIMENTS
 // ========================
 export function getExperiments() {
-  return request(`${BASE_URL}/api/experiments`)
+  return request(`${BASE_URL()}/api/experiments`)
 }
 
 export function getExperiment(experimentId) {
-  return request(`${BASE_URL}/api/experiments/${experimentId}`)
+  return request(`${BASE_URL()}/api/experiments/${experimentId}`)
 }
 
 // ========================
 // METRICS (FOR SIDE PANEL)
 // ========================
 export function getMetricsByExperiment(experimentId) {
-  return request(`${BASE_URL}/api/metrics/by_experiment/${experimentId}`)
+  return request(`${BASE_URL()}/api/metrics/by_experiment/${experimentId}`)
 }
 
 // ========================
 // PATIENTS
 // ========================
 export function getPatients() {
-  return request(`${BASE_URL}/api/patients`)
+  return request(`${BASE_URL()}/api/patients`)
 }
 
 export function getPatient(patientId) {
-  return request(`${BASE_URL}/api/patients/${patientId}`)
+  return request(`${BASE_URL()}/api/patients/${patientId}`)
 }
 
 export function getPatientsByCohort(cohortId) {
-  return request(`${BASE_URL}/api/patients/by_cohort/${cohortId}`)
+  return request(`${BASE_URL()}/api/patients/by_cohort/${cohortId}`)
 }
 
 // ========================
 // 🔥 RETRIEVAL (FOR CHARTS — MOST IMPORTANT)
 // ========================
 export function getMetricsDataframe(experimentId) {
-  return request(`${BASE_URL}/api/retrieval/metrics/${experimentId}`)
+  return request(`${BASE_URL()}/api/retrieval/metrics/${experimentId}`)
 }
 
 export function getRawCSVPaths(experimentId) {
-  return request(`${BASE_URL}/api/retrieval/raw_csv_paths/${experimentId}`)
+  return request(`${BASE_URL()}/api/retrieval/raw_csv_paths/${experimentId}`)
 }
 
 export function getRawCSVData(experimentId, selection = null) {
-  let url = `${BASE_URL}/api/retrieval/raw_csv/${experimentId}`
+  let url = `${BASE_URL()}/api/retrieval/raw_csv/${experimentId}`
 
   if (selection && selection.length) {
     const query = selection.join(',')
@@ -149,11 +150,11 @@ export function getRawCSVData(experimentId, selection = null) {
 // MISC
 // ========================
 export function getAvailableVariables() {
-  return request(`${BASE_URL}/api/available_variables`)
+  return request(`${BASE_URL()}/api/available_variables`)
 }
 
 export function testHttpController(payload) {
-  return request(`${BASE_URL}/api/test_http_controller`, {
+  return request(`${BASE_URL()}/api/test_http_controller`, {
     method: 'POST',
     body: JSON.stringify(payload)
   })

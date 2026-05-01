@@ -15,29 +15,12 @@
         <input v-model.number="store.workers" type="number" placeholder="Workers" />
       </div>
     </div>
-    <h4 class="section-title">Patient Count</h4>
-    <input v-model.number="store.patientCount" type="number" />
-    <h4 class="section-title">Demographics</h4>
-    <div v-for="(demo, i) in store.demographics" :key="i" class="row">
-      <select v-model="demo.name">
-        <option disabled value="">Select Patient</option>
-        <option v-for="p in patients" :key="p" :value="p">
-          {{ p }}
-        </option>
-      </select>
-      <input type="number" v-model.number="demo.percent" placeholder="%" />
-      <button class="icon-btn" @click="store.removeDemographic(i)">✖</button>
-    </div>
-    <button class="exp-btn add-btn" @click="store.demographics.push({ name: '', percent: 0 })">
-      + Add Demographic
-    </button>
   </div>
 </template>
 
 <script setup>
 import { useSimulationStore } from '@/stores/simulationStore'
 const store = useSimulationStore()
-const patients = ['soldier', 'adult']
 </script>
 
 <style scoped>

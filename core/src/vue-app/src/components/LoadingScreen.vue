@@ -1,15 +1,31 @@
 <!-- src/components/LoadingScreen.vue -->
 <script setup>
-defineProps({
-  message: {
-    type: String,
-    default: 'Loading simulation...'
-  },
-  submessage: {
-    type: String,
-    default: 'Preparing patient state, controllers, and events'
-  }
+import { computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useSimulationStore } from '@/stores/simulationStore'
+import ProgressPanel from './ProgressPanel.vue'
+
+const store = useSimulationStore()
+const router = useRouter()
+
+const message = computed(() => {
+  if (store.status === 'submitting') return 'Submitting simulation...'
+  if (store.status === 'running') return 'Running simulation...'
+  return 'Loading simulation...'
 })
+
+const submessage = computed(() => {
+  if (store.status === 'running') return `Processing ${store.total} batch jobs`
+  return 'Preparing patient state, controllers, and events'
+})
+
+watch(() => store.status, (status) => {
+  if (status === 'completed') {
+    router.push('/results')
+  } else if (status === 'cancelled' || status === 'failed') {
+    router.push('/')
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -33,6 +49,10 @@ defineProps({
         <span></span>
       </div>
     </div>
+
+    <div class="progress-panel-wrap">
+      <ProgressPanel />
+    </div>
   </div>
 </template>
 
@@ -40,12 +60,19 @@ defineProps({
 .loading-screen {
   min-height: 100vh;
   width: 100%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
   padding: 24px;
   box-sizing: border-box;
   background: linear-gradient(180deg, rgb(43, 42, 60) 0%, rgb(31, 38, 52) 55%, rgb(21, 27, 38) 100%);
   color: #f3f6fb;
+}
+
+.progress-panel-wrap {
+  width: min(460px, 100%);
 }
 
 .loading-card {

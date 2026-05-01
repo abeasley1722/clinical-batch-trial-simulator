@@ -1,22 +1,21 @@
 // src/stores/simulationStore.js
 import { defineStore } from 'pinia'
-import { runSimulation, getRawCSVData } from '@/services/api'
+import { runSimulation, getRawCSVData, getBatchStatus } from '@/services/api'
 import router from '@/router'
 
 export const useSimulationStore = defineStore('simulation', {
   state: () => ({
-    name: 'Test Batch',
-    duration: 300,
+    name: '',
+    duration: null,
     sampleRate: 50,
 
-    workers: 4,
+    workers: null,
     replicates: 1,
-    patientCount: 8,
 
-    demographics: [
-      { name: 'soldier', percent: 50 },
-      { name: 'adult', percent: 50 }
-    ],
+    patientCount: null,
+
+    demographics: [],
+
 
     targetMetrics: {},
 
@@ -29,8 +28,14 @@ export const useSimulationStore = defineStore('simulation', {
     // Progress tracking
     batchId: null,
     batchStatus: null,
+    completed: 0,
+    total: 0,
     progress: 0,
     status: 'idle',
+    phase: 'running',
+    patientGenTotal: 0,
+    patientGenCompleted: 0,
+    patientGenProgress: 0,
     pollInterval: null
   }),
 
@@ -176,40 +181,42 @@ export const useSimulationStore = defineStore('simulation', {
         clearInterval(this.pollInterval)
       }
 
-      this.status = 'polling'
+      this.pollInterval = setInterval(async () => {
+        try {
+          const data = await getBatchStatus(this.batchId)
 
-     this.pollInterval = setInterval(async () => {
-      try {
-        const data = await getRawCSVData(this.batchId)
+          this.batchStatus = data
+          this.status = data.status
+          this.phase = data.phase ?? 'running'
 
-        // normalize → always array
-        const rows = Array.isArray(data) ? data : []
+          this.completed = data.completed_jobs ?? 0
+          this.total = data.total_jobs ?? 0
+          this.progress = this.total > 0
+            ? Math.round((this.completed / this.total) * 100)
+            : 0
 
-        this.batchStatus = rows
+          this.patientGenTotal = data.patient_gen_total ?? 0
+          this.patientGenCompleted = data.patient_gen_completed ?? 0
+          this.patientGenProgress = this.patientGenTotal > 0
+            ? Math.round((this.patientGenCompleted / this.patientGenTotal) * 100)
+            : 0
 
-        // ✅ completion condition
-        if (rows.length > 0) {
-          console.log('✅ Data received → complete')
+          if (data.status !== 'running') {
+            clearInterval(this.pollInterval)
+            this.pollInterval = null
 
-          this.progress = 100
-          this.status = 'completed'
-
+            if (data.status === 'completed') {
+              router.push('/results')
+            } else if (data.status === 'cancelled' || data.status === 'failed') {
+              router.push('/')
+            }
+          }
+        } catch (err) {
+          console.error(err)
           clearInterval(this.pollInterval)
           this.pollInterval = null
-
-          router.push('/results')
         }
-
-      } catch (err) {
-        console.error(err)
-
-        clearInterval(this.pollInterval)
-        this.pollInterval = null
-
-        this.status = 'error'
-        router.push('/')
-      }
-    }, 30000)
+      }, 5000)
     },
 
     // =========================

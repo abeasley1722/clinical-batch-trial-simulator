@@ -20,7 +20,7 @@ from flask import Flask, request, jsonify, send_file, Blueprint
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
-from core.src.experiment_executor import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag
+from core.src.experiment_executor import AVAILABLE_VARIABLES, run_batch_thread, set_batch_cancel_flag, batches, batch_lock, batch_cancel_flags
 from core.src.controllers import UNIT_MAP, DATA_REQUEST_FACTORIES
 
 # === DATABASE ROUTES ===
@@ -108,9 +108,6 @@ def test_http_controller():
         return jsonify({'success': False, 'error': str(e)})
     
 # === BATCH MODE SUPPORT ===
-batches = {}
-batch_lock = threading.Lock()
-batch_cancel_flags = {}  # batch_id -> True if should cancel (for thread-level check)
 
 @api_bp.route('/api/submit_batch', methods=['POST'])
 def submit_batch():
@@ -276,10 +273,10 @@ def api_get_raw_csv_dataframe(experiment_id):
         ?selection=all
         ?selection=hr_bpm,spo2_pct
     """
-    print(f"Received request for raw CSV data of experiment {experiment_id} with query params: {request.args}")   
+    #print(f"Received request for raw CSV data of experiment {experiment_id} with query params: {request.args}")   
     # 🔥 Get selection from query params
     selection_param = request.args.get("selection")
-    print(f"Parsed selection param: {selection_param}")
+    #print(f"Parsed selection param: {selection_param}")
     if selection_param:
         selection = selection_param.split(",")
     else:
@@ -292,7 +289,7 @@ def api_get_raw_csv_dataframe(experiment_id):
     df = df.replace({np.nan: None})
 
     # 🔥 Debug (corrected)
-    print("Columns returned:", df.columns.tolist())
-    print(df.head())
+    #print("Columns returned:", df.columns.tolist())
+    #print(df.head())
 
     return jsonify(df.to_dict(orient='records'))
