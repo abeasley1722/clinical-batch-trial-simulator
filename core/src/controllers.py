@@ -11,9 +11,10 @@ import requests as http_requests
 from pulse.cdm.scalars import (
     FrequencyUnit, PressureUnit, TimeUnit,
     VolumeUnit, VolumePerTimeUnit, MassPerVolumeUnit,
-    LengthUnit, MassUnit, PressureTimePerVolumeUnit, VolumePerPressureUnit
+    LengthUnit, MassUnit, PressureTimePerVolumeUnit, VolumePerPressureUnit,
+    AmountPerVolumeUnit
 )
-from pulse.cdm.engine import SEDataRequest
+from pulse.cdm.engine import SEDataRequest, IEventHandler, eEvent
 
 # === UNIT MAPPING FOR HTTP CONTROLLERS ===
 UNIT_MAP = {
@@ -51,7 +52,7 @@ UNIT_MAP = {
     "inch": LengthUnit.inch,
     # Concentration units
     "g/L": MassPerVolumeUnit.g_Per_L,
-    "mg/mL": MassPerVolumeUnit.g_Per_L,
+    "mg/mL": MassPerVolumeUnit.mg_Per_mL,
     "ug/mL": MassPerVolumeUnit.ug_Per_mL,
     # Compliance units
     "mL/cmH2O": VolumePerPressureUnit.mL_Per_cmH2O,

@@ -19,6 +19,8 @@ Typical runtime: ~2-3 minutes per patient for stabilization
 import os
 import random
 import hashlib
+import sys
+import json
 from core.src.database.patient import insert_patient
 from datetime import datetime
 from pathlib import Path
